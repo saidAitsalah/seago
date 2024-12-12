@@ -1,0 +1,712 @@
+[
+    {
+        "PROTID": "ENSTTRP00000007202",
+        "Prot Length": "246",
+        "Annot": "14-3-3 protein",
+        "Annot SEAGO": "",
+        "Hits": "77",
+        "InterPro Domain": "10",
+        "GOs": "209",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007204",
+        "Prot Length": "590",
+        "Annot": "Polyadenylate-binding protein 1-like",
+        "Annot SEAGO": "",
+        "Hits": "3",
+        "InterPro Domain": "22",
+        "GOs": "69",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007206",
+        "Prot Length": "232",
+        "Annot": "Translocase of outer mitochondrial membrane 34",
+        "Annot SEAGO": "",
+        "Hits": "4",
+        "InterPro Domain": "6",
+        "GOs": "71",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007207",
+        "Prot Length": "435",
+        "Annot": "kinase 4",
+        "Annot SEAGO": "",
+        "Hits": "49",
+        "InterPro Domain": "5",
+        "GOs": "280",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007208",
+        "Prot Length": "529",
+        "Annot": "Potassium voltage-gated channel subfamily S member 1",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "24",
+        "GOs": "89",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000008",
+        "Prot Length": "529",
+        "Annot": "DEP domain containing 1B",
+        "Annot SEAGO": "",
+        "Hits": "7",
+        "InterPro Domain": "8",
+        "GOs": "53",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000009",
+        "Prot Length": "281",
+        "Annot": "Catalyzes the first and rate-limiting reaction of the four that constitute the long-chain fatty acids elongation cycle. This endoplasmic reticulum-bound enzymatic process, allows the addition of 2 carbons to the chain of long- and very long-chain fatty acids VLCFAs per cycle. Condensing enzyme with higher activity toward C18 acyl-CoAs, especially C18 3(n-3) acyl-CoAs and C18 3(n-6)-CoAs. Also active toward C20 4-, C18 0-, C18 1-, C18 2- and C16 0-CoAs, and weakly toward C20 0-CoA. Little or no activity toward C22 0-, C24 0-, or C26 0-CoAs. May participate",
+        "Annot SEAGO": "",
+        "Hits": "12",
+        "InterPro Domain": "2",
+        "GOs": "125",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000001033",
+        "Prot Length": "406",
+        "Annot": "homeobox protein",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "11",
+        "GOs": "285",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000001034",
+        "Prot Length": "414",
+        "Annot": "Macrophage receptor with collagenous structure",
+        "Annot SEAGO": "",
+        "Hits": "1",
+        "InterPro Domain": "13",
+        "GOs": "126",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000001035",
+        "Prot Length": "169",
+        "Annot": "Complement component 1, q subcomponent-like 2",
+        "Annot SEAGO": "",
+        "Hits": "23",
+        "InterPro Domain": "7",
+        "GOs": "15",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000046",
+        "Prot Length": "538",
+        "Annot": "Spermatogenesis-associated serine-rich protein 2",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "2",
+        "GOs": "8",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000047",
+        "Prot Length": "1083",
+        "Annot": "potassium voltage-gated channel, subfamily H",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "24",
+        "GOs": "63",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000048",
+        "Prot Length": "475",
+        "Annot": "Microspherule protein 1",
+        "Annot SEAGO": "",
+        "Hits": "39",
+        "InterPro Domain": "6",
+        "GOs": "209",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000049",
+        "Prot Length": "895",
+        "Annot": "Family with sequence similarity 186, member B",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "0",
+        "GOs": "2",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000292",
+        "Prot Length": "1109",
+        "Annot": "kinase 1",
+        "Annot SEAGO": "",
+        "Hits": "58",
+        "InterPro Domain": "5",
+        "GOs": "292",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000293",
+        "Prot Length": "406",
+        "Annot": "Olfactomedin-like protein 3",
+        "Annot SEAGO": "",
+        "Hits": "29",
+        "InterPro Domain": "3",
+        "GOs": "1",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000093",
+        "Prot Length": "275",
+        "Annot": "UBX domain-containing protein",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "3",
+        "GOs": "81",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007440",
+        "Prot Length": "3062",
+        "Annot": "collagen",
+        "Annot SEAGO": "",
+        "Hits": "3",
+        "InterPro Domain": "109",
+        "GOs": "57",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000094",
+        "Prot Length": "285",
+        "Annot": "positive regulation of microtubule binding",
+        "Annot SEAGO": "",
+        "Hits": "119",
+        "InterPro Domain": "11",
+        "GOs": "333",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000095",
+        "Prot Length": "2756",
+        "Annot": "phosphoprotein phosphatase activity",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "2",
+        "GOs": "38",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000096",
+        "Prot Length": "278",
+        "Annot": "PurA ssDNA and RNA-binding protein",
+        "Annot SEAGO": "",
+        "Hits": "6",
+        "InterPro Domain": "4",
+        "GOs": "24",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007447",
+        "Prot Length": "113",
+        "Annot": "Cytochrome c oxidase subunit",
+        "Annot SEAGO": "",
+        "Hits": "1",
+        "InterPro Domain": "3",
+        "GOs": "23",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007452",
+        "Prot Length": "283",
+        "Annot": "Transmembrane protein 30A",
+        "Annot SEAGO": "",
+        "Hits": "3",
+        "InterPro Domain": "1",
+        "GOs": "166",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007457",
+        "Prot Length": "1235",
+        "Annot": "Filamin A interacting protein 1",
+        "Annot SEAGO": "",
+        "Hits": "3",
+        "InterPro Domain": "1",
+        "GOs": "25",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000011673",
+        "Prot Length": "382",
+        "Annot": "with KRAB and SCAN domains 1",
+        "Annot SEAGO": "",
+        "Hits": "4",
+        "InterPro Domain": "31",
+        "GOs": "34",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000011675",
+        "Prot Length": "302",
+        "Annot": "Zinc finger and SCAN",
+        "Annot SEAGO": "",
+        "Hits": "4",
+        "InterPro Domain": "30",
+        "GOs": "98",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000011677",
+        "Prot Length": "191",
+        "Annot": "zinc finger protein 3",
+        "Annot SEAGO": "",
+        "Hits": "4",
+        "InterPro Domain": "35",
+        "GOs": "40",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000011678",
+        "Prot Length": "301",
+        "Annot": "Maintenance of mitochondrial structure and function",
+        "Annot SEAGO": "",
+        "Hits": "68",
+        "InterPro Domain": "4",
+        "GOs": "102",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000011680",
+        "Prot Length": "719",
+        "Annot": "DNA replication licensing factor MCM7",
+        "Annot SEAGO": "",
+        "Hits": "29",
+        "InterPro Domain": "20",
+        "GOs": "107",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000016541",
+        "Prot Length": "309",
+        "Annot": "AP-4 complex subunit mu-1",
+        "Annot SEAGO": "",
+        "Hits": "36",
+        "InterPro Domain": "9",
+        "GOs": "84",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000011683",
+        "Prot Length": "678",
+        "Annot": "TATA box binding protein associated factor",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "5",
+        "GOs": "148",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007010",
+        "Prot Length": "457",
+        "Annot": "lipase, member I",
+        "Annot SEAGO": "",
+        "Hits": "1",
+        "InterPro Domain": "7",
+        "GOs": "49",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007011",
+        "Prot Length": "237",
+        "Annot": "RNA binding motif protein 11",
+        "Annot SEAGO": "",
+        "Hits": "4",
+        "InterPro Domain": "5",
+        "GOs": "60",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007012",
+        "Prot Length": "431",
+        "Annot": "ABC transporter transmembrane region",
+        "Annot SEAGO": "",
+        "Hits": "3",
+        "InterPro Domain": "1",
+        "GOs": "1",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007013",
+        "Prot Length": "462",
+        "Annot": "heat shock",
+        "Annot SEAGO": "",
+        "Hits": "3",
+        "InterPro Domain": "9",
+        "GOs": "19",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007014",
+        "Prot Length": "479",
+        "Annot": "SAM domain-containing protein SAMSN-1 isoform",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "9",
+        "GOs": "73",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000455",
+        "Prot Length": "1120",
+        "Annot": "solute carrier family 12",
+        "Annot SEAGO": "",
+        "Hits": "49",
+        "InterPro Domain": "12",
+        "GOs": "150",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000007015",
+        "Prot Length": "133",
+        "Annot": "regulation of response to stimulus",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "0",
+        "GOs": "1",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000456",
+        "Prot Length": "579",
+        "Annot": "Nuclear receptor coactivator 5",
+        "Annot SEAGO": "",
+        "Hits": "8",
+        "InterPro Domain": "1",
+        "GOs": "62",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000458",
+        "Prot Length": "280",
+        "Annot": "receptor superfamily member 5",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "15",
+        "GOs": "343",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000000460",
+        "Prot Length": "834",
+        "Annot": "Cadherins are calcium-dependent cell adhesion proteins",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "27",
+        "GOs": "22",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000015678",
+        "Prot Length": "461",
+        "Annot": "solute carrier family 39",
+        "Annot SEAGO": "",
+        "Hits": "3",
+        "InterPro Domain": "1",
+        "GOs": "71",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000015278",
+        "Prot Length": "210",
+        "Annot": "geminin, DNA replication inhibitor",
+        "Annot SEAGO": "",
+        "Hits": "3",
+        "InterPro Domain": "2",
+        "GOs": "188",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000005068",
+        "Prot Length": "712",
+        "Annot": "Excision repair",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "10",
+        "GOs": "66",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000015288",
+        "Prot Length": "1064",
+        "Annot": "Family with sequence similarity 65, member B",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "2",
+        "GOs": "302",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000005081",
+        "Prot Length": "264",
+        "Annot": "Excision repair",
+        "Annot SEAGO": "",
+        "Hits": "3",
+        "InterPro Domain": "0",
+        "GOs": "66",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000005096",
+        "Prot Length": "496",
+        "Annot": "Excision repair",
+        "Annot SEAGO": "",
+        "Hits": "1",
+        "InterPro Domain": "0",
+        "GOs": "66",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000009609",
+        "Prot Length": "798",
+        "Annot": "Ecotropic viral integration site",
+        "Annot SEAGO": "",
+        "Hits": "4",
+        "InterPro Domain": "5",
+        "GOs": "122",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000009619",
+        "Prot Length": "266",
+        "Annot": "Domain of unknown function (DUF4596)",
+        "Annot SEAGO": "",
+        "Hits": "1",
+        "InterPro Domain": "1",
+        "GOs": "47",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000009623",
+        "Prot Length": "795",
+        "Annot": "Leucine rich repeat containing 8 family member E",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "14",
+        "GOs": "52",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000009634",
+        "Prot Length": "194",
+        "Annot": "Mitogen-activated protein kinase kinase 7",
+        "Annot SEAGO": "",
+        "Hits": "52",
+        "InterPro Domain": "4",
+        "GOs": "534",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000009639",
+        "Prot Length": "331",
+        "Annot": "snRNA-activating protein complex subunit 2",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "2",
+        "GOs": "81",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000009645",
+        "Prot Length": "455",
+        "Annot": "Mitochondrial import inner membrane translocase subunit TIM44",
+        "Annot SEAGO": "",
+        "Hits": "3",
+        "InterPro Domain": "3",
+        "GOs": "130",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000009650",
+        "Prot Length": "326",
+        "Annot": "ELAV-like protein",
+        "Annot SEAGO": "",
+        "Hits": "74",
+        "InterPro Domain": "17",
+        "GOs": "167",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000010162",
+        "Prot Length": "163",
+        "Annot": "Early activation antigen CD69",
+        "Annot SEAGO": "",
+        "Hits": "4",
+        "InterPro Domain": "5",
+        "GOs": "43",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000010186",
+        "Prot Length": "164",
+        "Annot": "C-type lectin-like 1",
+        "Annot SEAGO": "",
+        "Hits": "5",
+        "InterPro Domain": "1",
+        "GOs": "64",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000008039",
+        "Prot Length": "373",
+        "Annot": "Muscleblind-like",
+        "Annot SEAGO": "",
+        "Hits": "15",
+        "InterPro Domain": "12",
+        "GOs": "115",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000008046",
+        "Prot Length": "183",
+        "Annot": "RAP2A, member of RAS oncogene family",
+        "Annot SEAGO": "",
+        "Hits": "62",
+        "InterPro Domain": "16",
+        "GOs": "189",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000002457",
+        "Prot Length": "140",
+        "Annot": "calcitonin",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "2",
+        "GOs": "393",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000014320",
+        "Prot Length": "633",
+        "Annot": "HAUS augmin-like complex, subunit 5",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "11",
+        "GOs": "67",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000014325",
+        "Prot Length": "1034",
+        "Annot": "Potassium-transporting ATPase alpha chain 1",
+        "Annot SEAGO": "",
+        "Hits": "17",
+        "InterPro Domain": "29",
+        "GOs": "98",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000014330",
+        "Prot Length": "224",
+        "Annot": "transmembrane protein 147",
+        "Annot SEAGO": "",
+        "Hits": "54",
+        "InterPro Domain": "1",
+        "GOs": "23",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000004634",
+        "Prot Length": "467",
+        "Annot": "Sushi repeat-containing protein SRPX",
+        "Annot SEAGO": "",
+        "Hits": "3",
+        "InterPro Domain": "13",
+        "GOs": "79",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000014338",
+        "Prot Length": "389",
+        "Annot": "Glyceraldehyde-3-phosphate dehydrogenase",
+        "Annot SEAGO": "",
+        "Hits": "1",
+        "InterPro Domain": "10",
+        "GOs": "277",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000001233",
+        "Prot Length": "723",
+        "Annot": "Neutral amino acid transporter",
+        "Annot SEAGO": "",
+        "Hits": "17",
+        "InterPro Domain": "15",
+        "GOs": "82",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000004658",
+        "Prot Length": "1101",
+        "Annot": "Regulator of chromosome condensation (RCC1) repeat",
+        "Annot SEAGO": "",
+        "Hits": "1",
+        "InterPro Domain": "16",
+        "GOs": "84",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000014346",
+        "Prot Length": "316",
+        "Annot": "suprabasin",
+        "Annot SEAGO": "",
+        "Hits": "2",
+        "InterPro Domain": "0",
+        "GOs": "6",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000001235",
+        "Prot Length": "604",
+        "Annot": "Potassium voltage-gated channel subfamily C member 4",
+        "Annot SEAGO": "",
+        "Hits": "21",
+        "InterPro Domain": "29",
+        "GOs": "146",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000016570",
+        "Prot Length": "47",
+        "Annot": "dermokine",
+        "Annot SEAGO": "",
+        "Hits": "1",
+        "InterPro Domain": "0",
+        "GOs": "1",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000014358",
+        "Prot Length": "433",
+        "Annot": "dermokine",
+        "Annot SEAGO": "",
+        "Hits": "1",
+        "InterPro Domain": "0",
+        "GOs": "1",
+        "Classification": ""
+    },
+    {
+        "PROTID": "ENSTTRP00000001236",
+        "Prot Length": "970",
+        "Annot": "RNA-binding protein 15",
+        "Annot SEAGO": "",
+        "Hits": "9",
+        "InterPro Domain": "15",
+        "GOs": "225",
+        "Classification": ""
+    }
+]
