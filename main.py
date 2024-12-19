@@ -9,7 +9,7 @@ if __name__ == "__main__":
     app.setStyleSheet("QMainWindow { background-color: #EAEAEA; }")  
     parsed_results = load_parsed_blast_hits('C:/Users/saitsala/Documents/SeaGo/SeaGOcli/app/output.json')  
 
-    window = DynamicTableWindow(parsed_results)
+    window = DynamicTableWindow(parsed_results)          
     window.show()
 
     sys.exit(app.exec())

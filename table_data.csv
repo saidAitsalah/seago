@@ -1,4 +1,4 @@
-Protein ID,Protein Length,Annotation,Manual Annotation ,Hits,InterPro Domain,GOs,Classification
+Protein ID,Protein Length,Annotation,tags,Hits,InterPro Domain,GOs,Classification
 ENSTTRP00000007202,246,14-3-3 protein,,77,10,209,
 ENSTTRP00000007204,590,Polyadenylate-binding protein 1-like,,3,22,69,
 ENSTTRP00000007206,232,Translocase of outer mitochondrial membrane 34,,4,6,71,

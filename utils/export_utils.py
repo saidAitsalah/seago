@@ -3,7 +3,6 @@ import csv
 
 
 def export_to_json(table, filename='table_data.json'):
-    """Export the table data to a JSON file."""
     table_data = []
     for row in range(table.rowCount()):
         row_data = {
@@ -22,11 +21,10 @@ def export_to_json(table, filename='table_data.json'):
 
 
 def export_to_csv(table, filename='table_data.csv', delimiter=','):
-    """Export the table data to a CSV file."""
     with open(filename, mode='w', newline='') as file:
         writer = csv.writer(file, delimiter=delimiter)
-        # Write headers
+        # headers
         writer.writerow([table.horizontalHeaderItem(i).text() for i in range(table.columnCount())])
-        # Write rows
+        #  rows
         for row in range(table.rowCount()):
             writer.writerow([table.item(row, col).text() if table.item(row, col) else '' for col in range(table.columnCount())])
