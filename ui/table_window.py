@@ -1,22 +1,35 @@
-from PySide6.QtWidgets import QMainWindow, QTableWidget, QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton, QWidget, QMenuBar, QDialog,QStatusBar, QTextEdit, QTabWidget, QComboBox   ,QTableWidgetItem,QProgressBar, QRadioButton
+from PySide6.QtWidgets import QMainWindow,QScrollArea, QTableWidget,QSplitter ,QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton, QWidget,QGraphicsDropShadowEffect, QMenuBar, QSpacerItem, QSizePolicy, QMessageBox, QDialog,QStatusBar, QTextEdit, QTabWidget, QComboBox   ,QTableWidgetItem,QProgressBar, QRadioButton
 from PySide6.QtGui import QAction, QIcon, QPainter, QBrush, QColor, QFont,QPixmap
-import csv, json
 from PySide6.QtCore import Qt, QTimer
+from PySide6 import QtWidgets
+import matplotlib.pyplot as plt
+from PySide6.QtCharts import QChart, QChartView, QPieSeries
 from utils.table_manager import DataTableManager
-from utils.export_utils import export_to_json, export_to_csv
-
+from utils.export_utils import export_to_json, export_to_csv, export_to_tsv
+from ui.donut_widget import Widget
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import networkx as nx
+from utils.GO_api import GONetwork
 
 class DynamicTableWindow(QMainWindow):
+
     def __init__(self, parsed_results):
         super().__init__()
-        self.setWindowTitle("SeaGo")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setWindowTitle("seaGo")
+        self.setGeometry(100, 100, 1400, 850)
         self.setWindowIcon(QIcon('C:/Users/saitsala/Desktop/image.png'))
+        self.parsed_results = parsed_results  # Stocke parsed_results comme attribut
 
+        """Table de protéines"""
         self.table = QTableWidget()
-        DataTableManager.style_table_headers(self.table)
+        DataTableManager.style_table_headers(self.table,target_column=6)
         DataTableManager.populate_table(self.table, parsed_results)
+        #DataTableManager.change_specific_header_color(self.table, 6, "#4F518C")
 
+        self.table.itemSelectionChanged.connect(self.on_protein_selection_changed)
+
+        """Components"""
         self.create_menu_bar()
         self.create_filter_bar()
 
@@ -28,122 +41,311 @@ class DynamicTableWindow(QMainWindow):
         table_group_box_layout = QVBoxLayout()
         table_group_box_layout.addLayout(self.filter_layout)
         table_group_box_layout.addWidget(self.table)
-        table_group_box_layout.addWidget(self.row_count_label)
         table_group_box.setLayout(table_group_box_layout)
 
-        # Création du QTabWidget pour les détails d'annotation
+        table_group_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Création des onglets
         self.tabs = QTabWidget()
+        self.create_tabs(parsed_results)
+        
 
-        # Onglet Détails
-        self.description_widget = QTextEdit()
-        self.description_widget.setReadOnly(True)
-        self.description_widget.setPlaceholderText("Select a cell to view annotation details...")
-        tab_details = QWidget()
-        tab_details_layout = QVBoxLayout()
-        tab_details_layout.addWidget(self.description_widget)
-        tab_details.setLayout(tab_details_layout)
-        self.tabs.addTab(tab_details, "Details")
+        # Ajout d'un QSplitter
+        splitter = QSplitter()
+        splitter.setOrientation(Qt.Vertical)  # Orientation verticale (haut/bas)
+        splitter.addWidget(table_group_box)  # Ajout du group box
+        splitter.addWidget(self.tabs)  # Ajout des onglets
 
-        # Onglet Graphes
-        self.graph_widget = QLabel("Graphs will be displayed here...")
-        self.graph_widget.setAlignment(Qt.AlignCenter)
-        tab_graphs = QWidget()
-        tab_graphs_layout = QVBoxLayout()
-        tab_graphs_layout.addWidget(self.graph_widget)
-        tab_graphs.setLayout(tab_graphs_layout)
-        self.tabs.addTab(tab_graphs, "Graphs")
-
-        # Onglet Tables
-        self.additional_table = QTableWidget()
-        DataTableManager.style_table_headers(self.additional_table)
-        self.additional_table.setColumnCount(12) 
-
-        #col..
-
-        """  example_data = [
-            ["Hit1", "Domain1", "GO1"],
-            ["Hit2", "Domain2", "GO2"],
-            ["Hit3", "Domain3", "GO3"],
-        ] """
-        self.populate_additional_table(parsed_results)
-
-
-        tab_tables = QWidget()
-        tab_tables_layout = QVBoxLayout()
-        tab_tables_layout.addWidget(self.additional_table)
-        tab_tables.setLayout(tab_tables_layout)
-        self.tabs.addTab(tab_tables, "Tables")
+        # Configuration initiale des tailles
+        splitter.setSizes([600, 250])  # Taille initiale des sections
 
         # Layout principal
         main_layout = QVBoxLayout()
-        main_layout.addWidget(self.filter_group)  
-
-        main_layout.addWidget(table_group_box)
-        main_layout.addWidget(self.tabs)
+        main_layout.addWidget(splitter)
 
         container = QWidget()
         container.setLayout(main_layout)
         self.setCentralWidget(container)
 
-        self.dynamic_filters = [] 
+        # List of filters for concatenation
+        self.dynamic_filters = []
+        self.filter_fields = []
+        self.filter_logic_dropdown = QComboBox()  
+        self.filter_logic_dropdown.addItem('AND')
+        self.filter_logic_dropdown.addItem('OR')
 
-        #status bar
-         # Ajout de la barre de statut
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-
-        # Row count label
-        self.row_count_label = QLabel("Rows displayed: 0")
-        self.status_bar.addPermanentWidget(self.row_count_label)
-
-        # Clock (dynamic system time)
-        self.clock_label = QLabel()
-        self.status_bar.addPermanentWidget(self.clock_label)
-        self.update_time()  # Initial time update
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_time)
-        self.timer.start(1000)  # Update every second
-
-        # Progress bar for long tasks
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setMaximumWidth(200)
-        self.progress_bar.setVisible(False)  # Initially hidden
-        self.status_bar.addPermanentWidget(self.progress_bar)
-
-        # Status messages
-        """  self.status_message = QLabel(" Welcome to SeaGO ")
-        self.status_bar.addWidget(self.status_message) """
-
-
-        self.status_bar.setStyleSheet("""
-            QStatusBar {
-                background-color: #0B4F6C;
-                color: #FFFFFF;
-                font-weight: bold;
-                font-size: 12px;
-                border-top: 2px solid #86BBD8 ;
-            }
-            QLabel {
-                color: #93FF96;
-                font-weight: bold;
-                font-size: 12px;
-            }
-        """)
-       
-         # Ajout du bouton radio "SuperSayan"
-        self.super_sayan_button = QRadioButton("Best Hit ?")
-        self.super_sayan_button.setChecked(False)
-        self.super_sayan_button.toggled.connect(self.toggle_super_sayan_style)
-        main_layout.addWidget(self.super_sayan_button)
+        # Ajout de la barre de statut
+        self.create_status_bar()
 
         # Connect signals
-        self.table.itemChanged.connect(self.update_row_count)
         self.table.itemChanged.connect(self.update_row_count)
         self.table.cellClicked.connect(self.update_description)
         self.table.cellClicked.connect(self.on_cell_selected)
 
+    def on_protein_selection_changed(self):
+        """Updates the additional table based on the selected protein."""
+        selected_items = self.table.selectedItems()
+        if not selected_items:
+            return  
 
+        selected_row = selected_items[0].row()
+
+        selected_protein = self.parsed_results[selected_row]  
+        print(f"Selected protein: {selected_protein}") 
+
+        blast_hits = selected_protein.get("blast_hits", [])
         
+        self.update_hits_table(blast_hits)
+
+
+    def update_hits_table(self, blast_hits):
+        # Define column headers as in the 'populate_additional_table' function
+        hits_table_column_headers = [
+            "Hit id", "Definition", "Accession", "Identity", "Alignment length", "E-value", "Bit-score",
+            "QStart", "QEnd", "sStart", "sEnd", "Hsp bit score"
+        ]
+        
+        # Set the column headers for the hits table
+        self.additional_table.setHorizontalHeaderLabels(hits_table_column_headers)
+        
+        # Calculate total rows based on the number of hits
+        total_hits = len(blast_hits)
+        self.additional_table.setRowCount(total_hits)
+
+        # Apply table data styling (if any, like in the 'populate_additional_table' function)
+        # DataTableManager.style_table_data(self.hits_table)
+
+        # Populate the table row by row
+        for row_idx, hit in enumerate(blast_hits):
+            # Extract relevant fields for the row
+            query_start = hit.get("query_positions", {}).get("start", "N/A")
+            query_end = hit.get("query_positions", {}).get("end", "N/A")
+            subject_start = hit.get("subject_positions", {}).get("start", "N/A")
+            subject_end = hit.get("subject_positions", {}).get("end", "N/A")
+            hit_accession = hit.get("accession", "N/A")
+            hsp_bit_score = hit.get("hsps", [{}])[0].get("bit_score", "N/A")
+
+            # Compute identity as a percentage
+            identity = (float(hit.get("percent_identity", 0)) / float(hit.get("alignment_length", 1))) * 100
+
+            # Organize row data
+            row_data = [
+                hit["hit_id"],  # hit_id
+                hit["hit_def"],  # hit_def
+                hit_accession,  # accession
+                identity,  # identity
+                hit["alignment_length"],  # alignment_length
+                hit["e_value"],  # e_value
+                hit["bit_score"],  # bit_score
+                query_start,  # Query Start
+                query_end,  # Query End
+                subject_start,  # Subject Start
+                subject_end,  # Subject End
+                hsp_bit_score  # Hsp bit score
+            ]
+
+            # Add the row to the table
+            for col_idx, value in enumerate(row_data):
+                if col_idx == 3:  # Identity column with progress bar
+                    progress = QProgressBar()
+                    progress.setValue(int(value))
+                    progress.setAlignment(Qt.AlignCenter)
+                    if int(value) > 90:
+                        progress.setStyleSheet("QProgressBar::chunk {background-color: #8FE388;}")
+                    elif int(value) < 70:
+                        progress.setStyleSheet("QProgressBar::chunk {background-color: #E3AE88;}")
+                    else:
+                        progress.setStyleSheet("QProgressBar::chunk {background-color: #88BCE3;}")
+                    self.additional_table.setCellWidget(row_idx, col_idx, progress)
+                else:
+                    item = QTableWidgetItem(str(value))
+                    self.additional_table.setItem(row_idx, col_idx, item)
+
+        # Adjust column widths for better readability
+        for col_idx, header in enumerate(hits_table_column_headers):
+            if header == "Identity":
+                self.additional_table.setColumnWidth(col_idx, 120)
+            elif header == "hit_id":
+                self.additional_table.setColumnWidth(col_idx, 100)
+            else:
+                self.additional_table.setColumnWidth(col_idx, 120)
+
+
+
+
+
+    def create_tabs(self, parsed_results):
+        go_network = GONetwork()
+        """tabs pour les détails, les graphes et les tables."""
+        self.tabs.addTab(self.create_tables_tab(parsed_results), "Hits")
+        self.tabs.addTab(self.create_Iprscan_tab(parsed_results), "Domains")
+        self.tabs.addTab(self.create_details_tab(), "Details")
+
+        go_widget = go_network.create_go_network_tab("GO:0008150")
+
+        if go_widget:
+            self.tabs.addTab(go_widget, "GO")
+        else:
+            print("Échec de la création du widget GO")
+
+        self.tabs.addTab(self.create_graphs_tab(), "Donut")
+        self.tabs.addTab(self.create_chart_tab(), "Chart")
+        self.tabs.addTab(self.create_MetaD_tab(), "Metadata")
+
+        self.tabs.setStyleSheet("""
+            QTabBar::tab {
+                color: #333333;
+                font : Lato;
+                font-weight: bold;
+                font-size: 12px ;
+            }
+        """)
+
+
+    def create_details_tab(self):
+            self.description_widget = QTextEdit()
+            self.description_widget.setReadOnly(True)
+            self.description_widget.setPlaceholderText("Select a cell to view annotation details...")
+            tab_details = QWidget()
+            tab_details_layout = QVBoxLayout()
+            tab_details_layout.addWidget(self.description_widget)
+            tab_details.setLayout(tab_details_layout)
+            return tab_details
+            
+
+
+
+    def create_MetaD_tab(self):
+            description_widget = QLabel("Metadata will be displayed here...")
+            description_widget.setAlignment(Qt.AlignCenter)
+            tab_graphs = QWidget()
+            tab_graphs_layout = QVBoxLayout()
+            tab_graphs_layout.addWidget(description_widget)
+            tab_graphs.setLayout(tab_graphs_layout)
+            self.tabs.addTab(tab_graphs, "Graphs")
+            return tab_graphs
+    
+
+
+
+
+    def create_graphs_tab(self):
+        donut_chart_widget = Widget() 
+
+        donut_chart_widget.setMinimumSize(600, 600) 
+        donut_chart_widget.setMaximumSize(900, 600) 
+
+        #  scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(donut_chart_widget)  
+        scroll_area.setWidgetResizable(True) 
+
+        tab_graphs = QWidget()
+        tab_graphs_layout = QVBoxLayout()
+
+        scroll_layout = QHBoxLayout()
+        scroll_layout.addWidget(scroll_area)  
+     
+
+        tab_graphs_layout.addLayout(scroll_layout)  
+        tab_graphs.setLayout(tab_graphs_layout)
+
+        tab_graphs.setMinimumSize(800, 300)  
+   
+
+        return tab_graphs
+
+
+    def create_chart_tab(self):
+        """Crée un onglet avec un graphique de distribution des tags avec un design optimisé"""
+
+        donut_chart_widget = QWidget()
+    
+        chart = QChart()
+        series = QPieSeries()
+
+        series.append("With Blast Hits", 60)
+        series.append("With GO Mapping", 20)
+        series.append("Manually Annotated", 10)
+        series.append("Blasted Without hits", 10)
+
+        chart.addSeries(series)
+        chart.setTitle("Distribution des Queries")
+        
+        # Personnalisation du titre
+        chart.setTitleBrush(QColor("#4F518C")) 
+        chart.setTitleFont(QFont("Roboto", 14, QFont.Bold)) 
+
+        series.slices()[0].setBrush(QColor("#077187")) 
+        series.slices()[1].setBrush(QColor("#4F518C")) 
+        series.slices()[2].setBrush(QColor("#ED7D3A"))  
+        series.slices()[3].setBrush(QColor("#D0D0D0"))  
+
+        chart_view = QChartView(chart)
+        chart_view.setRenderHint(QPainter.Antialiasing)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(chart_view)
+        scroll_area.setWidgetResizable(True)
+
+        tab_graphs = QWidget()
+        tab_graphs_layout = QVBoxLayout()
+
+
+        scroll_layout = QHBoxLayout()
+        scroll_layout.addWidget(scroll_area)
+
+        tab_graphs_layout.addLayout(scroll_layout)
+
+        tab_graphs_layout.setContentsMargins(10, 10, 10, 10)  # Marges autour de l'onglet
+        tab_graphs_layout.setSpacing(10)  # Espacement entre les éléments
+
+        tab_graphs.setLayout(tab_graphs_layout)
+
+
+        return tab_graphs
+
+
+    def create_tables_tab(self, parsed_results):
+            """Crée l'onglet 'Tables'"""
+            self.additional_table = QTableWidget()
+            DataTableManager.style_AdditionalTable_headers(self.additional_table)
+            self.additional_table.setColumnCount(12)
+            DataTableManager.populate_additional_table(self.additional_table, parsed_results)
+
+            tab_tables = QWidget()
+            tab_tables_layout = QVBoxLayout()
+            tab_tables_layout.addWidget(self.additional_table)
+            tab_tables.setLayout(tab_tables_layout)
+
+
+            # Appliquer un style avec Qt Style Sheets
+            tab_tables.setStyleSheet("""
+                QTabBar::tab {
+                    background: #077187;       /* Couleur de l'onglet par défaut */
+                    color: black;                /* Couleur du texte */
+                    padding: 5px;                /* Marges intérieures */
+                }
+                QTabBar::tab:hover {
+                    background: lightgreen;      /* Couleur au survol */
+                }
+            """)
+            return tab_tables
+
+    def create_Iprscan_tab(self, parsed_results):
+            """Crée l'onglet 'Tables'"""
+            self.Iprsca_table = QTableWidget()
+            DataTableManager.style_IprscanTable_headers(self.Iprsca_table)
+            self.Iprsca_table.setColumnCount(12)
+            DataTableManager.populate_interproscan_table(self.Iprsca_table, parsed_results)
+
+            tab_Iprscan = QWidget()
+            tab_Iprscan_layout = QVBoxLayout()
+            tab_Iprscan_layout.addWidget(self.Iprsca_table)
+            tab_Iprscan.setLayout(tab_Iprscan_layout)
+            return tab_Iprscan
+                
+
 
     def update_description(self, row, column):
         """Update the description widget with details from the selected cell."""
@@ -152,73 +354,7 @@ class DynamicTableWindow(QMainWindow):
             self.description_widget.setText(annotation_text)
             self.tabs.setCurrentIndex(0)  # Switch to the Details tab
         else:
-            self.description_widget.clear()
-
-    def populate_additional_table(self, parsed_results):
-
-        addTable_column_headers = [
-            "Hit id","definition","accession", "identity", "Alignment length", "E_value", "Bit_score",
-            "QStart", "QEnd", "sStart", "sEnd", "Hsp bit score"
-        ] 
-        self.additional_table.setHorizontalHeaderLabels(addTable_column_headers)
-
-        total_hits = sum(len(result["blast_hits"]) for result in parsed_results) 
-        self.additional_table.setRowCount(total_hits)  
-
-        row_idx = 0  
-        for result in parsed_results:
-            for hit in result["blast_hits"]:
-                query_start = hit["query_positions"]["start"]
-                query_end = hit["query_positions"]["end"]
-                subject_start = hit["subject_positions"]["start"]
-                subject_end = hit["subject_positions"]["end"]
-                hit_accession = result.get("hit_accession", "N/A")
-                chunked_value = hit_accession.split("[[taxon")[0].strip()
-                hsp = hit.get("hsps", [])
-                hsp_bitScore = hsp[0].get("bit_score", "N/A")
-                
-
-                row_data = [
-                    hit["hit_id"],  # hit_id
-                    hit["hit_def"],  # hit_def
-                    chunked_value,  # accession
-                    hit["percent_identity"],  # percent_identity
-                    hit["alignment_length"],  # alignment_length
-                    hit["e_value"],  # e_value
-                    hit["bit_score"],  # bit_score
-                    query_start,  # Query Start
-                    query_end,    # Query End
-                    subject_start,  # Subject Start
-                    subject_end,    # Subject End
-                    hsp_bitScore
-                ]
-
-                for col_idx, value in enumerate(row_data):
-                    if col_idx == 3:  
-                        progress = QProgressBar()
-
-                        progress.setValue(int(value))
-                        progress.setAlignment(Qt.AlignCenter)
-                        if int(value) > 90:
-                            progress.setStyleSheet("QProgressBar::chunk {background-color: #8FE388;}")
-                        elif int(value) < 70:
-                            progress.setStyleSheet("QProgressBar::chunk {background-color: #FAA613;}")
-                        else:
-                            progress.setStyleSheet("QProgressBar::chunk {background-color: #5BC0EB ;}")
-                        self.additional_table.setCellWidget(row_idx, col_idx, progress)
-                    else:
-                        item = QTableWidgetItem(str(value))
-                        self.additional_table.setItem(row_idx, col_idx, item)
-
-                row_idx += 1
-
-        for col_idx, header in enumerate(addTable_column_headers):
-            if header == "percent_identity":
-                self.additional_table.setColumnWidth(col_idx, 100)
-            elif header == "hit_id":
-                self.additional_table.setColumnWidth(col_idx, 100)
-            else:
-                self.additional_table.setColumnWidth(col_idx, 100)        
+            self.description_widget.clear()  
 
                 
     def update_row_count(self):
@@ -226,41 +362,93 @@ class DynamicTableWindow(QMainWindow):
         visible_rows = sum(not self.table.isRowHidden(row) for row in range(self.table.rowCount()))
         self.row_count_label.setText(f"Rows displayed: {visible_rows}")
 
-    def update_description(self, row, column):
-        """Update the description widget with details from the selected cell."""
-        if column == 2: 
-            annotation_text = self.table.item(row, column).text()
-            self.description_widget.setText(annotation_text)
-        else:
-            self.description_widget.clear()
 
 
+    
+
+    """****************************************** Bar components *********************************************"""
 
     def create_menu_bar(self):
+        # Création de la barre de menu
         menu_bar = QMenuBar(self)
-        self.setMenuBar(menu_bar)
+        self.setMenuBar(menu_bar)  # Utilisation correcte
 
+        # Appliquer le style CSS
+        menu_bar.setStyleSheet("""
+            QMenuBar {
+                background-color: #D7D7D7; 
+                color: #333333;
+                font-family: Roboto;
+                font-weight: bold;
+                font-size: 12px;               
+            }
+
+            QMenuBar::item {
+                background-color: transparent; 
+                padding: 5px 10px; 
+            }
+
+            QMenuBar::item:selected {
+                background-color: #7393B3; 
+                border-radius: 4px; 
+            }
+
+            QMenu {
+                background-color: #D7D7D7; 
+                color: #333333; 
+                border: 1px solid #444444; 
+                margin: 2px;
+            }
+
+            QMenu::item {
+                background-color: transparent;
+                padding: 5px 20px; 
+                font-size: 13px; 
+            }
+
+            QMenu::item:selected {
+                background-color: #7393B3;
+                color: #FFD700;
+            }
+
+            QMenu::separator {
+                height: 2px; 
+                background-color: #444444;
+                margin: 4px 10px; 
+            }
+        """)
+
+        # Ajouter un effet d'ombre
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(10)  # Bordures floues
+        shadow.setXOffset(0)
+        shadow.setYOffset(3)  # Ombre sous la barre de menu
+        shadow.setColor(QColor(0, 0, 0, 80))  # Noir semi-transparent
+
+        menu_bar.setGraphicsEffect(shadow)
+
+        ### --- MENU ITEMS --- ###
+        
         # Menu File
         file_menu = menu_bar.addMenu("File")
+        open_action = QAction("Open", self)
         exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-        open_action = QAction("Open", self)
-        #exit_action.triggered.connect(self.close)
         file_menu.addAction(open_action)
+        file_menu.addAction(exit_action)
 
         # Menu Export
         export_menu = menu_bar.addMenu("Export")
         export_json_action = QAction("Export to JSON", self)
-        export_json_action.triggered.connect(self.export_to_json)
+        export_json_action.triggered.connect(lambda: export_to_json(self.table))
         export_menu.addAction(export_json_action)
 
         export_csv_action = QAction("Export to CSV", self)
-        export_csv_action.triggered.connect(self.export_to_csv)
+        export_csv_action.triggered.connect(lambda: export_to_csv(self.table))
         export_menu.addAction(export_csv_action)
 
         export_tsv_action = QAction("Export to TSV", self)
-        export_tsv_action.triggered.connect(self.export_to_tsv)
+        export_tsv_action.triggered.connect(lambda: export_to_tsv(self.table))
         export_menu.addAction(export_tsv_action)
 
         # Menu Help
@@ -269,47 +457,24 @@ class DynamicTableWindow(QMainWindow):
         about_action.triggered.connect(self.show_about_dialog)
         help_menu.addAction(about_action)
 
+        # Autres menus
+        tools_menu = menu_bar.addMenu("Tools")
+        view_menu = menu_bar.addMenu("View")
+
+        return menu_bar  # Retourner le menu_bar pour setMenuBar()
+
+
     def create_filter_bar(self):
+        # Supprimer les boutons add_filter_button et clear_button de la barre de filtres
         self.filter_layout = QHBoxLayout()
-        self.filter_fields = []  # Liste pour stocker les widgets de filtres ajoutés
 
-        # Bouton pour ajouter un filtre
-        self.add_filter_button = QPushButton("Add Filter")
-        self.add_filter_button.setIcon(QIcon("C:/Users/saitsala/Desktop/filter.png"))
-        self.add_filter_button.clicked.connect(self.add_filter_field)
+        # Nouveau bouton pour ouvrir la boîte de dialogue
+        self.open_dialog_button = QPushButton("Filter")
+        self.open_dialog_button.setIcon(QIcon("C:/Users/saitsala/Desktop/dialog-icon.png"))
+        self.open_dialog_button.clicked.connect(self.open_dialog)
+        self.filter_layout.addWidget(self.open_dialog_button)
 
-
-
-        self.clear_button = QPushButton("Clear All Filters") 
-        self.clear_button.setIcon(QIcon("C:/Users/saitsala/Desktop/clear-filter.png"))
-        self.clear_button.clicked.connect(self.clear_filters)
-        self.filter_layout.addWidget(self.clear_button)
-
-
-        # Placez le bouton dans un QHBoxLayout pour une meilleure structure
-        add_filter_layout = QHBoxLayout()
-        add_filter_layout.addWidget(self.add_filter_button)
-        self.filter_layout.addLayout(add_filter_layout)
-
-        # Placez les filtres dans un QGroupBox
-        self.filter_group = QGroupBox("Filters")
-        self.filter_group.setCheckable(True)
-        self.filter_group.setChecked(True)  # Initially visible
-
-        self.filter_logic_dropdown = QComboBox()
-        self.filter_logic_dropdown.addItems(["AND", "OR"])
-        self.filter_logic_dropdown.currentIndexChanged.connect(self.apply_dynamic_filters)
-
-        from PySide6.QtWidgets import QSpacerItem, QSizePolicy
-
-        # Add a spacer before the label
-        spacer = QSpacerItem(20, 10, QSizePolicy.Expanding, QSizePolicy.Minimum)
-        self.filter_layout.addItem(spacer)
-
-        self.filter_layout.addWidget(QLabel("Filter Logic:"))
-        self.filter_layout.addWidget(self.filter_logic_dropdown)
-
-         # Style
+        # Style
         self.setStyleSheet("""
         QLineEdit {
             border: 1px solid #D3D3D3;
@@ -330,79 +495,53 @@ class DynamicTableWindow(QMainWindow):
             font-weight: bold;
         }
         """)
+    
 
+    def create_status_bar(self):
+            """Crée la barre de statut avec horloge et barre de progression."""
+            self.status_bar = QStatusBar()
+            self.setStatusBar(self.status_bar)
 
-        self.filter_group.setLayout(self.filter_layout)
-        
+            # Row count label
+            #self.row_count_label = QLabel(self.row_count_label)
+            self.status_bar.addPermanentWidget(self.row_count_label)
 
-    def apply_filter(self):
-        """Applique les filtres dynamiquement pour toutes les colonnes."""
-        for row_idx in range(self.table.rowCount()):
-            row_visible = True  # On suppose que la ligne est visible par défaut
+            # Clock
+            self.clock_label = QLabel()
+            self.status_bar.addPermanentWidget(self.clock_label)
+            self.update_time()  # Initial time update
+            self.timer = QTimer(self)
+            self.timer.timeout.connect(self.update_time)
+            self.timer.start(1000)
 
-            # Vérifie chaque filtre dynamique
-            for col_idx, filter_input in enumerate(self.dynamic_filters):
-                if filter_input:  # Assurez-vous que l'entrée existe
-                    filter_value = filter_input.text().strip().lower()
-                    cell_item = self.table.item(row_idx, col_idx)
+            # Progress bar
+            self.progress_bar = QProgressBar()
+            self.progress_bar.setMaximumWidth(200)
+            self.progress_bar.setVisible(False)
+            self.status_bar.addPermanentWidget(self.progress_bar)
 
-                    # Si la valeur du filtre ne correspond pas, cache la ligne
-                    if filter_value and cell_item:
-                        cell_text = cell_item.text().strip().lower()
-                        if filter_value not in cell_text:
-                            row_visible = False
-                            break  # Pas besoin de vérifier les autres filtres pour cette ligne
+            # Status bar style
+            self.status_bar.setStyleSheet("""
+                QStatusBar {
+                    background-color: #0B4F6C;
+                    color: #FFFFFF;
+                    font-weight: bold;
+                    font-size: 12px;
+                    border-top: 2px solid #86BBD8;
+                }
+                QLabel {
+                    color: #93FF96;
+                    font-weight: bold;
+                    font-size: 12px;
+                }
+            """)
 
-            # Affiche ou cache la ligne
-            self.table.setRowHidden(row_idx, not row_visible)
-
-        self.update_row_count()
-
-
-    def export_to_json(self):
-        #Export the table data to a JSON file.
-        table_data = []
-        for row in range(self.table.rowCount()):
-            row_data = {
-                "PROTID": self.table.item(row, 0).text(),
-                "Prot Length": self.table.item(row, 1).text(),
-                "Annot": self.table.item(row, 2).text(),
-                "Annot SEAGO": self.table.cellWidget(row, 3).text(),
-                "Hits": self.table.item(row, 4).text(),
-                "InterPro Domain": self.table.item(row, 5).text(),
-                "GOs": self.table.item(row, 6).text(),
-                "Classification": self.table.cellWidget(row, 7).windowIconText()
-            }
-            table_data.append(row_data)
-        with open('table_data.json', 'w') as file:
-            json.dump(table_data, file, indent=4)
-        print("Table data has been exported to table_data.json")
-        print("Table data has been exported to table_data.json")
-
-    def export_to_csv(self):
-        with open('table_data.csv', mode='w', newline='') as file:
-            writer = csv.writer(file)
-            # headers
-            writer.writerow([self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())])
-
-            #  rows
-            for row in range(self.table.rowCount()):
-                row_data = [self.table.item(row, col).text() if self.table.item(row, col) else '' for col in range(self.table.columnCount())]
-                writer.writerow(row_data)
-
-    def export_to_tsv(self):
-        with open('table_data.tsv', mode='w', newline='') as file:
-            writer = csv.writer(file, delimiter='\t')
-            # headers
-            writer.writerow([self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())])
-
-            # rows
-            for row in range(self.table.rowCount()):
-                row_data = [self.table.item(row, col).text() if self.table.item(row, col) else '' for col in range(self.table.columnCount())]
-                writer.writerow(row_data)
+    """************************************** Dialogs  *********************************************"""
+       
 
     def show_about_dialog(self):
-        print("BLAST Table Example Application for testing performance and UI.")
+        """Todo : a informative about section !!"""
+        print("BLAST Table Example Application for testing UI.")
 
     def show_annotation_dialog(self, row, column):
         if column == 2:
@@ -443,35 +582,93 @@ class DynamicTableWindow(QMainWindow):
 
             dialog.exec()     
 
-    def toggle_super_sayan_style(self, checked):
-                        if checked:  # Si le bouton est activé
-                            self.additional_table.setStyleSheet("""
-                                QTableWidget::item {
-                                    border: 2px solid qlineargradient(
-                                        spread:pad, x1:0, y1:0, x2:1, y2:0,
-                                        stop:0 #FF4500, stop:1 #FFD700
-                                    );
-                                    background-color: rgba(255, 245, 238, 0.8);
-                                }
-                            """)
-                        else:  # Si le bouton est désactivé
-                            self.additional_table.setStyleSheet("")  #        
 
+    def open_dialog(self):
+        dialog = QDialog()
+        dialog.setWindowTitle("Filter options")
+        dialog.setWindowIcon(QIcon('C:/Users/saitsala/Desktop/image.png'))
+
+        dialog.setFixedSize(400, 300)  
+
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #D7D7D7; 
+                color: white;              /* Couleur du texte */
+                border-radius: 10px;       /* Coins arrondis */
+            }
+            QLabel {
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QLineEdit {
+                background-color: white;
+                border: 1px solid #077187;
+                border-radius: 5px;
+                padding: 5px;
+                color: #000;
+            }
+            QPushButton {
+                background-color: #077187;
+                color: white;
+                border-radius: 5px;
+                padding: 5px 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #ED7D3A;
+            }
+            QPushButton:pressed {
+                background-color: #4F518C;
+            }
+        """)
+
+        dialog_layout = QVBoxLayout()
+
+        dialog_input = QLineEdit()
+        dialog_input.setPlaceholderText("Enter your filter value")
+        dialog_layout.addWidget(dialog_input)
+
+        add_filter_button = QPushButton("Add Filter")
+        add_filter_button.setIcon(QIcon("C:/Users/saitsala/Desktop/filter.png"))
+        add_filter_button.clicked.connect(self.add_filter_field)
+        dialog_layout.addWidget(add_filter_button)
+
+        clear_button = QPushButton("Clear All Filters")
+        clear_button.setIcon(QIcon("C:/Users/saitsala/Desktop/clear-filter.png"))
+        clear_button.clicked.connect(self.clear_filters)
+        dialog_layout.addWidget(clear_button)
+
+        ok_button = QPushButton("OK")
+        ok_button.clicked.connect(dialog.accept)  
+        # Layout pour les boutons en bas
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(add_filter_button)
+        button_layout.addWidget(clear_button)
+        button_layout.addWidget(ok_button)
+
+        dialog_layout.addWidget(add_filter_button)
+        dialog_layout.addWidget(clear_button)
+        dialog_layout.addWidget(ok_button)
+
+        # Ajouter le layout des boutons en bas de la boîte de dialogue
+        dialog_layout.addLayout(button_layout)
+
+       
+        dialog.setLayout(dialog_layout)
+
+        dialog.exec()
 
 
     """************************************** Gestion des filters  **********************************"""
 
-    
     def add_filter_field(self):
         """Ajoute un champ de filtre dynamique basé sur les en-têtes de la table."""
-        filter_row_layout = QHBoxLayout()  # Un layout horizontal pour chaque ligne de filtre
+        filter_row_layout = QHBoxLayout()  
 
-        # Dropdown pour sélectionner la colonne (en-têtes de table)
         column_dropdown = QComboBox()
         column_headers = [self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())]
         column_dropdown.addItems(column_headers)
 
-        # Champ de texte pour la valeur du filtre
         filter_input = QLineEdit()
         filter_input.setPlaceholderText("Enter filter value...")
 
@@ -480,52 +677,56 @@ class DynamicTableWindow(QMainWindow):
         remove_button.setIcon(QIcon("C:/Users/saitsala/Desktop/trash.png"))
         remove_button.clicked.connect(lambda: self.remove_filter_field(filter_row_layout))
 
-        # Ajoutez les widgets au layout de la ligne
         filter_row_layout.addWidget(QLabel("Column:"))
         filter_row_layout.addWidget(column_dropdown)
         filter_row_layout.addWidget(filter_input)
         filter_row_layout.addWidget(remove_button)
 
-        # Ajoutez le layout de la ligne au layout principal des filtres
         self.filter_layout.addLayout(filter_row_layout)
 
         # Stockez les widgets pour appliquer les filtres plus tard
         self.filter_fields.append((column_dropdown, filter_input))
 
-        # Connecter le changement de texte à la fonction de filtrage
         filter_input.textChanged.connect(self.apply_dynamic_filters)
 
     def remove_filter_field(self, filter_layout):
         """Supprime un champ de filtre dynamique."""
+        # Supprimer tous les widgets du layout
         for i in reversed(range(filter_layout.count())):
             widget = filter_layout.itemAt(i).widget()
             if widget:
-                widget.deleteLater()
+                widget.setParent(None)  # Détacher du layout
+                widget.deleteLater()   # Planifie la suppression
 
-        self.filter_layout.removeItem(filter_layout)
-        filter_layout.setParent(None)
-
-        # Nettoyer la liste des filtres dynamiques
-        if filter_layout in self.dynamic_filters:
-            self.dynamic_filters.remove(filter_layout)
+        # Retirer le layout lui-même
+        parent_widget = filter_layout.parentWidget()
+        if parent_widget and isinstance(parent_widget.layout(), QtWidgets.QLayout):
+            parent_layout = parent_widget.layout()
+            parent_layout.removeItem(filter_layout)
         
-        # Remove from filter_fields
-        for col_dropdown, filter_input in self.filter_fields:
-            if filter_layout in (col_dropdown, filter_input):
-                self.filter_fields.remove((col_dropdown, filter_input))
-                break
+        # Nettoyer la liste des filtres dynamiques
+        self.filter_fields = [
+            (column_dropdown, filter_input)
+            for column_dropdown, filter_input in self.filter_fields
+            if filter_input and filter_input.parent() is not None
+        ]
 
 
 
     def apply_dynamic_filters(self):
         """Applies all dynamic filters to the table."""
         logic = self.filter_logic_dropdown.currentText()  # 'AND' or 'OR'
-        
+
+        # Liste pour stocker les filtres valides
+        valid_filter_fields = []
+
+        # Parcours de toutes les lignes de la table
         for row in range(self.table.rowCount()):
             row_matches = []
-            for column_dropdown, filter_input in self.filter_fields:
-                # Check if filter_input is still valid
-                if filter_input and filter_input.parent() is not None:
+            
+            for column_dropdown, filter_input in self.filter_fields[:]:  # Itérer sur une copie de la liste
+                # Vérifier si filter_input existe toujours et est valide
+                if filter_input and filter_input.isVisible() and filter_input.parent() is not None:
                     filter_value = filter_input.text().strip().lower()
                     if not filter_value:
                         continue
@@ -533,14 +734,20 @@ class DynamicTableWindow(QMainWindow):
                     column_index = column_dropdown.currentIndex()
                     item = self.table.item(row, column_index)
                     row_matches.append(item and filter_value in item.text().strip().lower())
+                else:
+                    # Si filter_input est supprimé, on l'enlève de filter_fields
+                    if (column_dropdown, filter_input) in self.filter_fields:
+                        self.filter_fields.remove((column_dropdown, filter_input))
 
+            # Logique de filtrage selon 'AND' ou 'OR'
             if logic == "AND":
                 row_visible = all(row_matches) if row_matches else True
             else:
                 row_visible = any(row_matches) if row_matches else True
-                    
+
             self.table.setRowHidden(row, not row_visible)
 
+        # Mise à jour de la barre de statut
         visible_count = sum(not self.table.isRowHidden(row) for row in range(self.table.rowCount()))
         if visible_count == 0:
             self.statusBar().showMessage("No results found.")
@@ -551,11 +758,23 @@ class DynamicTableWindow(QMainWindow):
 
 
     def clear_filters(self):
-        for column_dropdown, filter_input in self.filter_fields:
+        """Clears all filters from the table."""
+        for column_dropdown, filter_input in self.filter_fields[:]:  # Itérer sur une copie de la liste
+            # Vérifier si filter_input est valide et encore présent
             if filter_input and filter_input.parent() is not None:
                 filter_input.clear()
-        self.reset_table_visibility()  # Call a method to reset visibility
-        self.apply_dynamic_filters()
+            else:
+                # Si filter_input est invalide, retirer de la liste
+                self.filter_fields.remove((column_dropdown, filter_input))
+
+        # Réafficher toutes les lignes
+        for row in range(self.table.rowCount()):
+            self.table.setRowHidden(row, False)
+
+        # Mise à jour de la barre de statut
+        self.statusBar().showMessage("Filters cleared.")
+
+
 
     def reset_table_visibility(self):
         """Reset the visibility of all rows in the table."""
@@ -601,9 +820,7 @@ class DynamicTableWindow(QMainWindow):
         visible_rows = sum(not self.table.isRowHidden(row) for row in range(self.table.rowCount()))
         self.row_count_label.setText(f"Rows displayed: {visible_rows}")
 
-
-        
-
-
+"""***************************** charts *********************************************"""   
+    
 
         

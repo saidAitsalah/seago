@@ -1,72 +1,72 @@
-Protein ID	Protein Length	Annotation	tags	Hits	InterPro Domain	GOs	Classification
-ENSTTRP00000007202	246	14-3-3 protein		77	10	209	
-ENSTTRP00000007204	590	Polyadenylate-binding protein 1-like		3	22	69	
-ENSTTRP00000007206	232	Translocase of outer mitochondrial membrane 34		4	6	71	
-ENSTTRP00000007207	435	kinase 4		49	5	280	
-ENSTTRP00000007208	529	Potassium voltage-gated channel subfamily S member 1		2	24	89	
-ENSTTRP00000000008	529	DEP domain containing 1B		7	8	53	
-ENSTTRP00000000009	281	Catalyzes the first and rate-limiting reaction of the four that constitute the long-chain fatty acids elongation cycle. This endoplasmic reticulum-bound enzymatic process, allows the addition of 2 carbons to the chain of long- and very long-chain fatty acids VLCFAs per cycle. Condensing enzyme with higher activity toward C18 acyl-CoAs, especially C18 3(n-3) acyl-CoAs and C18 3(n-6)-CoAs. Also active toward C20 4-, C18 0-, C18 1-, C18 2- and C16 0-CoAs, and weakly toward C20 0-CoA. Little or no activity toward C22 0-, C24 0-, or C26 0-CoAs. May participate		12	2	125	
-ENSTTRP00000001033	406	homeobox protein		2	11	285	
-ENSTTRP00000001034	414	Macrophage receptor with collagenous structure		1	13	126	
-ENSTTRP00000001035	169	Complement component 1, q subcomponent-like 2		23	7	15	
-ENSTTRP00000000046	538	Spermatogenesis-associated serine-rich protein 2		2	2	8	
-ENSTTRP00000000047	1083	potassium voltage-gated channel, subfamily H		2	24	63	
-ENSTTRP00000000048	475	Microspherule protein 1		39	6	209	
-ENSTTRP00000000049	895	Family with sequence similarity 186, member B		2	0	2	
-ENSTTRP00000000292	1109	kinase 1		58	5	292	
-ENSTTRP00000000293	406	Olfactomedin-like protein 3		29	3	1	
-ENSTTRP00000000093	275	UBX domain-containing protein		2	3	81	
-ENSTTRP00000007440	3062	collagen		3	109	57	
-ENSTTRP00000000094	285	positive regulation of microtubule binding		119	11	333	
-ENSTTRP00000000095	2756	phosphoprotein phosphatase activity		2	2	38	
-ENSTTRP00000000096	278	PurA ssDNA and RNA-binding protein		6	4	24	
-ENSTTRP00000007447	113	Cytochrome c oxidase subunit		1	3	23	
-ENSTTRP00000007452	283	Transmembrane protein 30A		3	1	166	
-ENSTTRP00000007457	1235	Filamin A interacting protein 1		3	1	25	
-ENSTTRP00000011673	382	with KRAB and SCAN domains 1		4	31	34	
-ENSTTRP00000011675	302	Zinc finger and SCAN		4	30	98	
-ENSTTRP00000011677	191	zinc finger protein 3		4	35	40	
-ENSTTRP00000011678	301	Maintenance of mitochondrial structure and function		68	4	102	
-ENSTTRP00000011680	719	DNA replication licensing factor MCM7		29	20	107	
-ENSTTRP00000016541	309	AP-4 complex subunit mu-1		36	9	84	
-ENSTTRP00000011683	678	TATA box binding protein associated factor		2	5	148	
-ENSTTRP00000007010	457	lipase, member I		1	7	49	
-ENSTTRP00000007011	237	RNA binding motif protein 11		4	5	60	
-ENSTTRP00000007012	431	ABC transporter transmembrane region		3	1	1	
-ENSTTRP00000007013	462	heat shock		3	9	19	
-ENSTTRP00000007014	479	SAM domain-containing protein SAMSN-1 isoform		2	9	73	
-ENSTTRP00000000455	1120	solute carrier family 12		49	12	150	
-ENSTTRP00000007015	133	regulation of response to stimulus		2	0	1	
-ENSTTRP00000000456	579	Nuclear receptor coactivator 5		8	1	62	
-ENSTTRP00000000458	280	receptor superfamily member 5		2	15	343	
-ENSTTRP00000000460	834	Cadherins are calcium-dependent cell adhesion proteins		2	27	22	
-ENSTTRP00000015678	461	solute carrier family 39		3	1	71	
-ENSTTRP00000015278	210	geminin, DNA replication inhibitor		3	2	188	
-ENSTTRP00000005068	712	Excision repair		2	10	66	
-ENSTTRP00000015288	1064	Family with sequence similarity 65, member B		2	2	302	
-ENSTTRP00000005081	264	Excision repair		3	0	66	
-ENSTTRP00000005096	496	Excision repair		1	0	66	
-ENSTTRP00000009609	798	Ecotropic viral integration site		4	5	122	
-ENSTTRP00000009619	266	Domain of unknown function (DUF4596)		1	1	47	
-ENSTTRP00000009623	795	Leucine rich repeat containing 8 family member E		2	14	52	
-ENSTTRP00000009634	194	Mitogen-activated protein kinase kinase 7		52	4	534	
-ENSTTRP00000009639	331	snRNA-activating protein complex subunit 2		2	2	81	
-ENSTTRP00000009645	455	Mitochondrial import inner membrane translocase subunit TIM44		3	3	130	
-ENSTTRP00000009650	326	ELAV-like protein		74	17	167	
-ENSTTRP00000010162	163	Early activation antigen CD69		4	5	43	
-ENSTTRP00000010186	164	C-type lectin-like 1		5	1	64	
-ENSTTRP00000008039	373	Muscleblind-like		15	12	115	
-ENSTTRP00000008046	183	RAP2A, member of RAS oncogene family		62	16	189	
-ENSTTRP00000002457	140	calcitonin		2	2	393	
-ENSTTRP00000014320	633	HAUS augmin-like complex, subunit 5		2	11	67	
-ENSTTRP00000014325	1034	Potassium-transporting ATPase alpha chain 1		17	29	98	
-ENSTTRP00000014330	224	transmembrane protein 147		54	1	23	
-ENSTTRP00000004634	467	Sushi repeat-containing protein SRPX		3	13	79	
-ENSTTRP00000014338	389	Glyceraldehyde-3-phosphate dehydrogenase		1	10	277	
-ENSTTRP00000001233	723	Neutral amino acid transporter		17	15	82	
-ENSTTRP00000004658	1101	Regulator of chromosome condensation (RCC1) repeat		1	16	84	
-ENSTTRP00000014346	316	suprabasin		2	0	6	
-ENSTTRP00000001235	604	Potassium voltage-gated channel subfamily C member 4		21	29	146	
-ENSTTRP00000016570	47	dermokine		1	0	1	
-ENSTTRP00000014358	433	dermokine		1	0	1	
-ENSTTRP00000001236	970	RNA-binding protein 15		9	15	225	
+Protein ID	Description	Length	Tags	Definition	PFAMs	GOs	Classification	Preferred name	COG	Enzyme	InterPro
+ENSTTRP00000000096	PurA ssDNA and RNA-binding protein	633	24	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	PurA			PURG	K	EC:-	
+ENSTTRP00000007447	Cytochrome c oxidase subunit	633	23	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	COX7a			COX7A2	C	EC:-	
+ENSTTRP00000007452	Transmembrane protein 30A	633	166	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	CDC50			TMEM30A	DKT	EC:-	
+ENSTTRP00000007457	Filamin A interacting protein 1	633	25	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	CortBP2			FILIP1	S	EC:-	
+ENSTTRP00000011673	with KRAB and SCAN domains 1	633	34	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	KRAB,SCAN,zf-C2H2			ZKSCAN1	K	EC:-	
+ENSTTRP00000011675	Zinc finger and SCAN	633	98	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	SCAN,zf-C2H2			ZSCAN21	K	EC:-	
+ENSTTRP00000011677	zinc finger protein 3	633	40	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	KRAB,zf-C2H2			ZNF3	S	EC:-	
+ENSTTRP00000011678	Maintenance of mitochondrial structure and function	633	102	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	JAB,MitMem_reg			COPS6	OT	EC:-	
+ENSTTRP00000011680	DNA replication licensing factor MCM7	633	107	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	MCM,MCM_N,MCM_OB			MCM7	L	EC:3.6.4.12	
+ENSTTRP00000016541	AP-4 complex subunit mu-1	633	84	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Adap_comp_sub,Clat_adaptor_s			AP4M1	U	EC:-	
+ENSTTRP00000011683	TATA box binding protein associated factor	633	148	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	TAF,TAF6_C			TAF6	K	EC:-	
+ENSTTRP00000007010	lipase, member I	633	49	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Lipase			LIPI	T	EC:-	
+ENSTTRP00000007011	RNA binding motif protein 11	633	60	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	RRM_1			RBM11	A	EC:-	
+ENSTTRP00000007012	ABC transporter transmembrane region	633	1	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	ABC_membrane,ABC_tran			ABCC13	Q	EC:-	
+ENSTTRP00000007013	heat shock	633	19	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	HSP70			HSPA13	O	EC:-	
+ENSTTRP00000007014	SAM domain-containing protein SAMSN-1 isoform	633	73	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	SAM_1,SAM_2,SH3_2,SLY			SAMSN1	T	EC:-	
+ENSTTRP00000000455	solute carrier family 12	633	150	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	AA_permease,SLC12			SLC12A5	P	EC:-	
+ENSTTRP00000007015	regulation of response to stimulus	633	1	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	-			-	S	EC:-	
+ENSTTRP00000000456	Nuclear receptor coactivator 5	633	62	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	HGTP_anticodon,RRM_1			NCOA5	UY	EC:-	
+ENSTTRP00000000458	receptor superfamily member 5	633	343	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	TNFR_c6			CD40	T	EC:-	
+ENSTTRP00000007202	14-3-3 protein	633	209	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	14-3-3			YWHAB	O	EC:-	
+ENSTTRP00000007204	Polyadenylate-binding protein 1-like	633	69	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	PABP,RRM_1			PABPC1L	AJ	EC:-	
+ENSTTRP00000007206	Translocase of outer mitochondrial membrane 34	633	71	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	TPR_1,TPR_2,TPR_8			TOMM34	S	EC:-	
+ENSTTRP00000007207	kinase 4	633	280	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Mst1_SARAH,Pkinase			STK4	T	EC:-	
+ENSTTRP00000007208	Potassium voltage-gated channel subfamily S member 1	633	89	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	BTB_2,Ion_trans			KCNS1	P	EC:-	
+ENSTTRP00000000008	DEP domain containing 1B	633	53	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	DEP,RhoGAP			DEPDC1B	T	EC:-	
+ENSTTRP00000000009	Catalyzes the first and rate-limiting reaction of the four that constitute the long-chain fatty acids elongation cycle. This endoplasmic reticulum-bound enzymatic process, allows the addition of 2 carbons to the chain of long- and very long-chain fatty acids VLCFAs per cycle. Condensing enzyme with higher activity toward C18 acyl-CoAs, especially C18 3(n-3) acyl-CoAs and C18 3(n-6)-CoAs. Also active toward C20 4-, C18 0-, C18 1-, C18 2- and C16 0-CoAs, and weakly toward C20 0-CoA. Little or no activity toward C22 0-, C24 0-, or C26 0-CoAs. May participate	633	125	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	ELO			ELOVL7	I	EC:2.3.1.199	
+ENSTTRP00000001033	homeobox protein	633	285	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Engrail_1_C_sig,Homeobox			EN1	K	EC:-	
+ENSTTRP00000001034	Macrophage receptor with collagenous structure	633	126	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Collagen,SRCR			MARCO	T	EC:-	
+ENSTTRP00000001035	Complement component 1, q subcomponent-like 2	633	15	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	C1q,Collagen			C1QL2	S	EC:-	
+ENSTTRP00000000046	Spermatogenesis-associated serine-rich protein 2	633	8	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	DUF1387			SPATS2	S	EC:-	
+ENSTTRP00000000047	potassium voltage-gated channel, subfamily H	633	63	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Ion_trans,PAS_9,cNMP_binding			KCNH3	PT	EC:-	
+ENSTTRP00000000048	Microspherule protein 1	633	209	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	FHA,MCRS_N			MCRS1	KT	EC:-	
+ENSTTRP00000000049	Family with sequence similarity 186, member B	633	2	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	-			FAM186B	S	EC:-	
+ENSTTRP00000000292	kinase 1	633	292	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Pkinase			HIPK1	T	EC:2.7.11.1	
+ENSTTRP00000000293	Olfactomedin-like protein 3	633	1	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	OLF			OLFML3	W	EC:-	
+ENSTTRP00000000093	UBX domain-containing protein	633	81	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	UBX			UBXN8	T	EC:-	
+ENSTTRP00000007440	collagen	633	57	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Collagen,VWA,fn3			COL12A1	W	EC:-	
+ENSTTRP00000000094	positive regulation of microtubule binding	633	333	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Metallophos			PPP2CB	T	EC:3.1.3.16	
+ENSTTRP00000000095	phosphoprotein phosphatase activity	633	38	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Metallophos			-	T	EC:3.6.1.41	
+ENSTTRP00000014325	Potassium-transporting ATPase alpha chain 1	633	98	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Cation_ATPase,Cation_ATPase_C,Cation_ATPase_N,E1-E2_ATPase,H-K_ATPase_N,Hydrolase			ATP4A	P	EC:3.6.3.10	
+ENSTTRP00000014330	transmembrane protein 147	633	23	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	DUF2053			TMEM147	S	EC:-	
+ENSTTRP00000004634	Sushi repeat-containing protein SRPX	633	79	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	DUF4174,HYR,Sushi			SRPX	T	EC:-	
+ENSTTRP00000014338	Glyceraldehyde-3-phosphate dehydrogenase	633	277	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Gp_dh_C,Gp_dh_N			GAPDHS	G	EC:1.2.1.12	
+ENSTTRP00000001233	Neutral amino acid transporter	633	82	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	SNF			SLC6A17	T	EC:-	
+ENSTTRP00000004658	Regulator of chromosome condensation (RCC1) repeat	633	84	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	RCC1			RPGR	DZ	EC:-	
+ENSTTRP00000014346	suprabasin	633	6	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	-			SBSN	S	EC:-	
+ENSTTRP00000001235	Potassium voltage-gated channel subfamily C member 4	633	146	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	BTB_2,Ion_trans,Potassium_chann			KCNC4	P	EC:-	
+ENSTTRP00000016570	dermokine	633	1	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	-			DMKN	T	EC:-	
+ENSTTRP00000014358	dermokine	633	1	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	-			DMKN	T	EC:-	
+ENSTTRP00000001236	RNA-binding protein 15	633	225	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	RRM_1,SPOC			RBM15	A	EC:-	
+ENSTTRP00000000460	Cadherins are calcium-dependent cell adhesion proteins	633	22	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Cadherin,Cadherin_C			CDH22	S	EC:-	
+ENSTTRP00000015678	solute carrier family 39	633	71	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Zip			SLC39A8	P	EC:-	
+ENSTTRP00000015278	geminin, DNA replication inhibitor	633	188	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Geminin			GMNN	S	EC:-	
+ENSTTRP00000005068	Excision repair	633	66	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Helicase_C,SNF2_N,VIGSSK			ERCC6L2	KL	EC:-	
+ENSTTRP00000015288	Family with sequence similarity 65, member B	633	302	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	PL48			FAM65B	Z	EC:-	
+ENSTTRP00000005081	Excision repair	633	66	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Helicase_C,SNF2_N,VIGSSK			ERCC6L2	KL	EC:-	
+ENSTTRP00000005096	Excision repair	633	66	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Helicase_C,SNF2_N,VIGSSK			ERCC6L2	KL	EC:-	
+ENSTTRP00000009609	Ecotropic viral integration site	633	122	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	RabGAP-TBC			EVI5L	S	EC:-	
+ENSTTRP00000009619	Domain of unknown function (DUF4596)	633	47	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	DUF4596			PRR36	S	EC:-	
+ENSTTRP00000009623	Leucine rich repeat containing 8 family member E	633	52	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	LRR_8,Pannexin_like			LRRC8E	S	EC:-	
+ENSTTRP00000009634	Mitogen-activated protein kinase kinase 7	633	534	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Pkinase			MAP2K7	T	EC:2.7.12.2	
+ENSTTRP00000009639	snRNA-activating protein complex subunit 2	633	81	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	SnAPC_2_like			SNAPC2	K	EC:-	
+ENSTTRP00000009645	Mitochondrial import inner membrane translocase subunit TIM44	633	130	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Tim44			TIMM44	U	EC:-	
+ENSTTRP00000009650	ELAV-like protein	633	167	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	RRM_1			ELAVL1	A	EC:-	
+ENSTTRP00000010162	Early activation antigen CD69	633	43	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Lectin_C			CD69	TV	EC:-	
+ENSTTRP00000010186	C-type lectin-like 1	633	64	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Lectin_C			CLECL1	TV	EC:-	
+ENSTTRP00000008039	Muscleblind-like	633	115	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	zf-CCCH,zf-CCCH_2			MBNL2	K	EC:-	
+ENSTTRP00000008046	RAP2A, member of RAS oncogene family	633	189	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Ras			RAP2A	S	EC:-	
+ENSTTRP00000002457	calcitonin	633	393	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	Calc_CGRP_IAPP			CALCA	T	EC:-	
+ENSTTRP00000014320	HAUS augmin-like complex, subunit 5	633	67	pep:novel scaffold:turTru1:scaffold_102216:2882:10755:-1 gene:ENSTTRG00000015104 transcript:ENSTTRT00000015105	HAUS5			HAUS5	S	EC:-	

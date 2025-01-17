@@ -7,7 +7,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet("QMainWindow { background-color: #EAEAEA; }")  
-    parsed_results = load_parsed_blast_hits('C:/Users/saitsala/Documents/SeaGo/SeaGOcli/app/output.json')  
+    parsed_results = load_parsed_blast_hits('C:/Users/saitsala/Documents/SeaGo/SeaGOcli/testData/output.json')  
 
     window = DynamicTableWindow(parsed_results)          
     window.show()
