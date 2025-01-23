@@ -1,8 +1,8 @@
-from PyQt5.QtWidgets import (
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QPushButton,
-    QDialog, QCheckBox, QDialogButtonBox, QMainWindow, QWidget, QHBoxLayout
+from PyQt5. QtWidgets import (
+     QVBoxLayout, 
+    QDialog, QCheckBox, QDialogButtonBox
 )
-from PyQt5.QtCore import Qt
+
 
 class ColumnSelectorDialog(QDialog):
     def __init__(self, parent=None, column_headers=None):
@@ -18,7 +18,7 @@ class ColumnSelectorDialog(QDialog):
             layout.addWidget(checkbox)
             self.checkboxes.append(checkbox)
 
-        # Add OK and Cancel buttons
+        #  OK and Cancel buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)

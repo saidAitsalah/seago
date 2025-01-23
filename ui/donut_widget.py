@@ -2,16 +2,16 @@ from __future__ import annotations
 
 """Nested Donuts example du Qt v5.x"""
 
-import sys
+import sys  # noqa: E402
 
-from PySide6.QtCore import Qt, QTimer, Slot
-from PySide6.QtGui import QPainter
-from PySide6.QtWidgets import QApplication, QGridLayout, QWidget
-from PySide6.QtCharts import QChart, QChartView, QPieSeries, QPieSlice
+from PySide6.QtCore import Qt, QTimer, Slot  # noqa: E402
+from PySide6.QtGui import QPainter  # noqa: E402
+from PySide6.QtWidgets import QApplication, QGridLayout, QWidget  # noqa: E402
+from PySide6.QtCharts import QChart, QChartView, QPieSeries, QPieSlice  # noqa: E402
 
 
-from random import randrange
-from functools import partial
+from random import randrange  # noqa: E402
+from functools import partial  # noqa: E402
 
 
 class Widget(QWidget):

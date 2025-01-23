@@ -1,5 +1,6 @@
 from PySide6.QtCore import Qt
 
+#to review
 def apply_dynamic_filters(table, filter_fields, logic):
     """Applies all dynamic filters to the table."""
     for row in range(table.rowCount()):
