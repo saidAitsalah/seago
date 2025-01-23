@@ -4,7 +4,6 @@ from PySide6.QtCore import Qt
 import sys
 from ..utils.table_manager import DataTableManager
 
-# Simuler des données pour le test
 parsed_results = [
     {
         "query_id": "P12345",
@@ -22,7 +21,7 @@ parsed_results = [
         }],
         "blast_hits": [{"hit_id": "H12345"}]
     },
-    # Ajoutez plus de résultats simulés si nécessaire
+    # to update
 ]
 
 go_definitions = {
@@ -35,7 +34,6 @@ def test_populate_table():
     table = QTableWidget()
     DataTableManager.populate_table(table, parsed_results, go_definitions)
 
-# Mesurer le temps d'exécution
 time_taken = timeit.timeit("test_populate_table()", setup="from __main__ import test_populate_table", number=10)
 print(f"Temps d'exécution moyen pour populate_table: {time_taken / 10} secondes")
 
