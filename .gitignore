@@ -1,0 +1,30 @@
+# Empêcher les fichiers de l'environnement virtuel
+venv_pyside/
+.env
+
+#lib
+lib/
+
+#ontologies
+/ontologies
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+*.log
+*.tmp
+*.swp
+
+.vscode/
+
+
+
+node_modules/
+package-lock.json
+
+# artefacts de build
+dist/
+build/
+*.egg-info/
