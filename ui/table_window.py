@@ -87,29 +87,29 @@ class DynamicTableWindow(QMainWindow):
         """Generate Pyvis graph in QWebEngine widget dynamically from GO list."""
         file_path = "go_graph.html"  # Temp file
         
-        # Liste de termes GO à partir de la chaîne donnée
+        # Liste of go terms to test
         go_terms = "GO:0000981,GO:0003674,GO:0003700,GO:0006355,GO:0006357,GO:0008150,GO:0009889,GO:0010468,GO:0010556,GO:0019219,GO:0019222,GO:0031323,GO:0031326,GO:0050789,GO:0050794,GO:0051171,GO:0051252,GO:0060255,GO:0065007,GO:0080090,GO:0140110,GO:1903506,GO:2000112,GO:2001141"
         go_list = go_terms.split(",")
 
-        # Création du graphe Pyvis
+        #graphe Pyvis
         net = Network(height="750px", width="100%", directed=True)
 
-        # Ajout des nœuds
+        # nodes
         for go in go_list:
             net.add_node(go, label=go)
 
-        # Ajout d'arêtes (exemple simple : chaque élément pointe vers le suivant)
+        # simple edges
         for i in range(len(go_list) - 1):
             net.add_edge(go_list[i], go_list[i + 1])
 
-        # Génération du fichier HTML
+        # HTML generation
         net.write_html(file_path)
 
-        # Lecture du fichier HTML
+        # read
         with open(file_path, "r", encoding="utf-8") as f:
             html_content = f.read()
 
-        # Affichage dans un QWebEngineView
+        # display QWebEngineView
         web_view = QWebEngineView()
         web_view.setHtml(html_content)
 
