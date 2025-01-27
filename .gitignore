@@ -19,7 +19,7 @@ __pycache__/
 
 .vscode/
 
-
+*spec
 
 node_modules/
 package-lock.json
