@@ -257,7 +257,7 @@ class DataTableManager:
 
     @staticmethod
     def populate_additional_table(table: QTableWidget, parsed_results: list):
-        """Populates a table with parsed results for hits info."""
+        """Remplit une table avec les résultats analysés pour les informations sur les hits."""
 
         addTable_column_headers = [
             "Hit id", "definition", "accession", "identity", "Alignment length", "E_value", "Bit_score",
@@ -277,14 +277,30 @@ class DataTableManager:
                 hit_accession = result.get("hit_accession", "N/A")
                 chunked_value = hit_accession.split("[[taxon")[0].strip()
                 hsp = hit.get("hsps", [])
-                hsp_bitScore = hsp[0].get("bit_score", "N/A")
+                hsp = hit.get("hsps", [])
+                if hsp:
+                    hsp_bitScore = hsp[0].get("bit_score", "N/A")
+                else:
+                    hsp_bitScore = "N/A"
+
+
+                #hsp_bitScore = hsp[0].get("bit_score", "N/A")
+
+                # Vérification et conversion des valeurs numériques
+                try:
+                    percent_identity = float(hit["percent_identity"]) if hit["percent_identity"] is not None else 0.0
+                    alignment_length = float(hit["alignment_length"]) if hit["alignment_length"] is not None else 1.0  # Éviter la division par zéro
+                    percent_identity_value = (percent_identity / alignment_length) * 100
+                except (ValueError, ZeroDivisionError):
+                    percent_identity_value = 0.0  # Valeur par défaut appropriée
+
 
                 row_data = [
                     hit["hit_id"],  # hit_id
                     hit["hit_def"],  # hit_def
                     chunked_value,  # accession
-                    (float(hit["percent_identity"]) / float(hit["alignment_length"])) * 100,  # percent_identity
-                    hit["alignment_length"],  # alignment_length
+                    percent_identity_value,  # percent_identity
+                    alignment_length,  # alignment_length
                     hit["e_value"],  # e_value
                     hit["bit_score"],  # bit_score
                     query_start,  # Query Start
@@ -295,8 +311,7 @@ class DataTableManager:
                 ]
 
                 for col_idx, value in enumerate(row_data):
-                        
-                    if col_idx == 3:  # percent_identity column with progress bar
+                    if col_idx == 3:  # colonne percent_identity avec barre de progression
                         progress = QProgressBar()
                         progress.setValue(int(value))
                         progress.setAlignment(Qt.AlignCenter)
@@ -307,16 +322,16 @@ class DataTableManager:
                         else:
                             progress.setStyleSheet("QProgressBar::chunk {background-color: #88BCE3;}")
                         table.setCellWidget(row_idx, col_idx, progress)
-                    elif col_idx == 0: 
+                    elif col_idx == 0:
                         item = QTableWidgetItem(str(value))
-                        item.setBackground(QBrush(QColor("#A8D8DE")))  #hits id with a color code
+                        item.setBackground(QBrush(QColor("#A8D8DE")))  # hits id avec un code couleur
                         table.setItem(row_idx, col_idx, item)
-                    
                     else:
                         item = QTableWidgetItem(str(value))
                         table.setItem(row_idx, col_idx, item)
 
-                row_idx += 1        
+                row_idx += 1
+
 
         for col_idx, header in enumerate(addTable_column_headers):
                     if header == "percent_identity":
