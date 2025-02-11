@@ -155,13 +155,33 @@ class DynamicTableWindow(QMainWindow):
             subject_start = hit.get("subject_positions", {}).get("start", "N/A")
             subject_end = hit.get("subject_positions", {}).get("end", "N/A")
             hit_accession = hit.get("accession", "N/A")
-            hsp_bit_score = hit.get("hsps", [{}])[0].get("bit_score", "N/A")
-            identity = (float(hit.get("percent_identity", 0)) / float(hit.get("alignment_length", 1))) * 100
+            #hsp_bit_score = hit.get("hsps", [{}])[0].get("bit_score", "N/A")
+            hsp_bit_score = (hit.get("hsps", [])[:1] or [{}])[0].get("bit_score", "N/A")
+            #identity = (float(hit.get("percent_identity", 0)) / float(hit.get("alignment_length", 1))) * 100
+            
+            #identity handling
+            percent_identity_str = hit.get("percent_identity")
+            percent_identity = 0.0
+            if percent_identity_str and str(percent_identity_str).replace(".", "", 1).isdigit(): #Added max one dot
+                try:
+                    percent_identity = float(percent_identity_str)
+                except ValueError:
+                    print(f"Warning: Invalid percent_identity string: {percent_identity_str}")
+
+            alignment_length_str = hit.get("alignment_length")
+            alignment_length = 1.0
+            if alignment_length_str and alignment_length_str != "Unknown":
+                try:
+                    alignment_length = float(alignment_length_str)
+                except ValueError:
+                    print(f"Warning: Invalid alignment_length string: {alignment_length_str}")
+
+            identity = (percent_identity / (alignment_length if alignment_length > 0 else 1)) * 100
 
             # row data
             row_data = [
                 hit["hit_id"],  # hit_id
-                hit["hit_def"],  # hit_def
+               # hit["hit_def"],  # hit_def
                 hit_accession,  # accession
                 identity,  # identity
                 hit["alignment_length"],  # alignment_length
@@ -176,16 +196,18 @@ class DynamicTableWindow(QMainWindow):
 
             for col_idx, value in enumerate(row_data):
                 if col_idx == 3:  # Identity column with progress bar
-                    progress = QProgressBar()
-                    progress.setValue(int(value))
-                    progress.setAlignment(Qt.AlignCenter)
-                    if int(value) > 90:
-                        progress.setStyleSheet("QProgressBar::chunk {background-color: #8FE388;}")
-                    elif int(value) < 70:
-                        progress.setStyleSheet("QProgressBar::chunk {background-color: #E3AE88;}")
-                    else:
-                        progress.setStyleSheet("QProgressBar::chunk {background-color: #88BCE3;}")
-                    self.additional_table.setCellWidget(row_idx, col_idx, progress)
+                    if value != "Unknown":    
+                        progress = QProgressBar()
+                        progress.setValue(float(value))
+                        progress.setAlignment(Qt.AlignCenter)
+
+                        if float(value) > 90:
+                                progress.setStyleSheet("QProgressBar::chunk {background-color: #8FE388;}")
+                        elif float(value) < 70:
+                                progress.setStyleSheet("QProgressBar::chunk {background-color: #E3AE88;}")
+                        else:
+                                progress.setStyleSheet("QProgressBar::chunk {background-color: #88BCE3;}")
+                        self.additional_table.setCellWidget(row_idx, col_idx, progress)
                 else:
                     item = QTableWidgetItem(str(value))
                     self.additional_table.setItem(row_idx, col_idx, item)

@@ -133,9 +133,9 @@ class DataTableManager:
             raise ValueError("parsed_results should be a list of dictionaries.")
 
         column_headers = [
-            "Protein ID", "Description","Length", "Results",
-            "PFAMs", "GO", "Classification",
-            "Preferred name", "COG", "Enzyme","InterPro"
+            "Protein ID","Preferred name", "Annotation","Classification","Length", "Results",
+            "InterPro", "GO", 
+             "COG", "Enzyme","PFAMs"
         ]
         table.setColumnCount(len(column_headers))
         table.setHorizontalHeaderLabels(column_headers)
@@ -212,19 +212,19 @@ class DataTableManager:
 
             """Data List"""
             row_data = [
-                prot_id, eggnog_annotation, prot_length, tags,
-                 PFAMs, None, classification_tag,
-                preferred_name, cog_category,f"EC:{ec_number}",None
+                prot_id,preferred_name, eggnog_annotation, classification_tag, prot_length, tags,
+                  None,None,
+                 cog_category,f"EC:{ec_number}",PFAMs
             ]
 
             for col_idx, value in enumerate(row_data):
-                if col_idx == 3:
+                if col_idx == 5:
                     table.setCellWidget(row_idx, col_idx, DataTableManager.create_tag_widget(value))
-                elif col_idx == 6:
+                elif col_idx == 3:
                     table.setCellWidget(row_idx, col_idx, DataTableManager.create_icon_widget(value))
-                elif col_idx == 5:
+                elif col_idx == 7:
                     table.setCellWidget(row_idx, col_idx, go_label)
-                elif col_idx == 10:
+                elif col_idx == 6:
                     table.setCellWidget(row_idx, col_idx, IPR_label)                    
                 else:
                     table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
@@ -241,10 +241,10 @@ class DataTableManager:
                 table.setColumnWidth(col_idx, 80)  
             elif header == "Protein ID": 
                 table.setColumnWidth(col_idx, 130)          
-            elif header == "Description":  
+            elif header == "Annotation":  
                 table.setColumnWidth(col_idx, 250)      
             elif header == "GO ": 
-                table.setColumnWidth(col_idx, 300)     
+                table.setColumnWidth(col_idx, 330)     
             elif header == "InterPro":  
                 table.setColumnWidth(col_idx, 100)
             elif header == "Preferred name":  
@@ -285,21 +285,43 @@ class DataTableManager:
 
 
                 #hsp_bitScore = hsp[0].get("bit_score", "N/A")
-
+                """ 
                 # Vérification et conversion des valeurs numériques
                 try:
+                    
                     percent_identity = float(hit["percent_identity"]) if hit["percent_identity"] is not None else 0.0
                     alignment_length = float(hit["alignment_length"]) if hit["alignment_length"] is not None else 1.0  # Éviter la division par zéro
                     percent_identity_value = (percent_identity / alignment_length) * 100
+                    if percent_identity == "Unknown":
+                        raise ValueError("L'âge ne peut pas être négatif ❌")
                 except (ValueError, ZeroDivisionError):
-                    percent_identity_value = 0.0  # Valeur par défaut appropriée
+                    percent_identity_value = 0.0  # Valeur par défaut appropriée """
 
+                #identity handling
+                percent_identity_str = hit.get("percent_identity")
+                percent_identity = 0.0
+                if percent_identity_str and str(percent_identity_str).replace(".", "", 1).isdigit(): #Added max one dot
+                    try:
+                        percent_identity = float(percent_identity_str)
+                    except ValueError:
+                        print(f"Warning: Invalid percent_identity string: {percent_identity_str}")
+
+                alignment_length_str = hit.get("alignment_length")
+                alignment_length = 1.0
+                if alignment_length_str and alignment_length_str != "Unknown":
+                    try:
+                        alignment_length = float(alignment_length_str)
+                    except ValueError:
+                        print(f"Warning: Invalid alignment_length string: {alignment_length_str}")
+
+                percent_identity_value = (percent_identity / (alignment_length if alignment_length > 0 else 1)) * 100
 
                 row_data = [
                     hit["hit_id"],  # hit_id
-                    hit["hit_def"],  # hit_def
+                    #hit["hit_def"],  # hit_def
                     chunked_value,  # accession
-                    percent_identity_value,  # percent_identity
+                    #percent_identity_value,  # percent_identity
+                    percent_identity_value,
                     alignment_length,  # alignment_length
                     hit["e_value"],  # e_value
                     hit["bit_score"],  # bit_score
@@ -360,7 +382,7 @@ class DataTableManager:
         if not isinstance(interproscan_results, list) or not all(isinstance(result, dict) for result in interproscan_results):
             raise ValueError("parsed_results should be a list of dictionaries.")
 
-
+     
         for row_idx, result in enumerate(interproscan_results):
 
             InterproScan_annotation = result.get("InterproScan_annotation", [])
