@@ -27,11 +27,12 @@ class AppController(QObject):
         self.current_task: Optional[asyncio.Task] = None
         self.signals = AppSignals()
         self._connect_signals()
+        self.start_time = None  # Add start time attribute
 
     def _setup_ui(self):
         """Initialise l'interface utilisateur"""
         self.main_window.setWindowTitle("DataTable Interface")
-        self.main_window.resize(800, 600)
+        self.main_window.resize(1200, 900)
         
         # Barre de progression
         self.progress_bar = QProgressBar()
@@ -53,6 +54,7 @@ class AppController(QObject):
         status_bar.addPermanentWidget(self.cancel_btn)
         self.main_window.setStatusBar(status_bar)
         
+        
         self.main_window.show()
 
     def _connect_signals(self):
@@ -63,6 +65,7 @@ class AppController(QObject):
 
     @asyncSlot()
     async def open_file_and_load(self):
+        self.start_time = time.time()  # Record start time *here*, just before the operation
         """Ouvre une boîte de dialogue et charge le fichier"""
         try:
             file_path = await self._show_async_file_dialog()
@@ -90,35 +93,46 @@ class AppController(QObject):
             dialog.deleteLater()
 
     async def process_file(self, file_path: str):
-        """Charge et traite le fichier avec gestion de progression"""
-        start_time = time.time()  # Record start time
-        try:
-            self.current_task = asyncio.current_task()
-            self._show_loading_state(True)
-            
-            # Simulation de progression
-            self.signals.progress_updated.emit(10, "Démarrage du chargement...")
-            parsed_results = await load_parsed_blast_hits(
-                file_path,
-                progress_callback=lambda p: self.signals.progress_updated.emit(p, "Chargement...")
-            )
-            end_time = time.time()  # Record end time
-            elapsed_time = end_time - start_time  # Calculate elapsed time
+            try:
+                self.current_task = asyncio.current_task()
+                self._show_loading_state(True)
 
-            # Format the elapsed time (example)
-            elapsed_time_str = f"{elapsed_time:.2f} seconds"
-            self.signals.progress_updated.emit(100, f"Chargement terminé! ({elapsed_time_str})")
-            await asyncio.sleep(0.5)  # Laisse voir la progression complète
-            self.show_results(parsed_results)
-            
-        except asyncio.CancelledError:
-            self.signals.task_cancelled.emit()
-        except Exception as e:
-            self.signals.error_occurred.emit(f"Erreur de traitement: {str(e)}")
-            traceback.print_exc()
-        finally:
-            self._show_loading_state(False)
-            self.current_task = None
+                self.signals.progress_updated.emit(1, "Chargement du fichier...")  # Initial progress
+
+                parsed_results = await load_parsed_blast_hits(
+                    file_path,
+                    progress_callback=self.handle_progress_update  # Use a dedicated method
+                )
+
+                
+                await asyncio.sleep(0.5)  # Let the final progress be visible
+                self.show_results(parsed_results)
+
+                end_time = time.time()
+                if self.start_time is not None: # check if self.start_time is not None
+                    total_time = end_time - self.start_time
+                    print(f"Temps total d'exécution : {total_time:.2f} secondes")
+                    self.signals.progress_updated.emit(100, f"Chargement terminé! ({total_time})")
+
+                else:
+                    print("Start time not recorded.")
+
+
+            except asyncio.CancelledError:
+                self.signals.task_cancelled.emit()
+            except Exception as e:
+                self.signals.error_occurred.emit(f"Erreur de traitement: {str(e)}")
+                traceback.print_exc()
+            finally:
+                self._show_loading_state(False)
+                self.current_task = None
+
+    def handle_progress_update(self, progress: int):
+        """Handles progress updates and emits the signal."""
+        message = f"Traitement des données... ({progress:.1f}%)"
+        self.signals.progress_updated.emit(progress, message)
+        # Force GUI update if needed (use sparingly)
+        self.app.processEvents() # à utiliser avec parcimonie
 
     def _show_loading_state(self, loading: bool):
         """Affiche/masque les éléments de chargement"""
