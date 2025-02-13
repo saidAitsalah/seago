@@ -161,7 +161,7 @@ class DynamicTableWindow(QMainWindow):
             # row data
             row_data = [
                 hit["hit_id"],  # hit_id
-                hit["hit_def"],  # hit_def
+              #  hit["hit_def"],  # hit_def
                 hit_accession,  # accession
                 identity,  # identity
                 hit["alignment_length"],  # alignment_length
