@@ -10,7 +10,7 @@ async def load_parsed_blast_hits(json_file, progress_callback=None):
             return json.load(f)
 
     loop = asyncio.get_running_loop()
-    file_size = os.path.getsize(json_file)  # Accurate file size
+    #file_size = os.path.getsize(json_file)  # Accurate file size
 
     data = await loop.run_in_executor(None, load_json_sync, json_file)
 
@@ -22,8 +22,7 @@ async def load_parsed_blast_hits(json_file, progress_callback=None):
     if progress_callback:
         num_results = len(results)
         for i, result in enumerate(results):
-            # Process each result here if needed (e.g., data transformation)
-            # ... your processing logic for 'result' ...
+
 
             progress = (i + 1) / num_results * 100
             progress_callback(progress)

@@ -127,210 +127,79 @@ class DataTableManager:
 
 
     @staticmethod
-    def populate_table(table: QTableWidget, parsed_results: list, go_definitions: dict ):
-        """Populate the table with data."""
-        if not isinstance(parsed_results, list) or not all(isinstance(result, dict) for result in parsed_results):
-            raise ValueError("parsed_results should be a list of dictionaries.")
+    def populate_table(table, parsed_results, go_definitions):
+        table.setRowCount(0)  # Clear existing rows
+        table.setColumnCount(1) # Just one column for now
+        table.setHorizontalHeaderLabels(["query_id"]) # Column header
 
-        column_headers = [
-            "Protein ID","Preferred name", "Annotation","Classification","Length", "Results",
-            "InterPro", "GO", 
-             "COG", "Enzyme","PFAMs"
-        ]
-        table.setColumnCount(len(column_headers))
-        table.setHorizontalHeaderLabels(column_headers)
-        table.setRowCount(len(parsed_results))
-
-
-        for row_idx, result in enumerate(parsed_results):
-            """Table data storing"""
-            prot_id = result.get("query_id", "N/A")
-            prot_length = result.get("query_len", 0)
-            eggnog_annotations = result.get("eggNOG_annotations", [])
-            eggnog_annotation = eggnog_annotations[0].get("Description", "N/A") if eggnog_annotations else "N/A"
-            #query_def = result.get("query-def", "N/A")
-            PFAMs = eggnog_annotations[0].get("PFAMs", "N/A") if eggnog_annotations else "N/A"
-            preferred_name = eggnog_annotations[0].get("Preferred_name", "N/A") if eggnog_annotations else "N/A"
-            cog_category = eggnog_annotations[0].get("COG_category", "N/A") if eggnog_annotations else "N/A"
-            ec_number = eggnog_annotations[0].get("EC", "N/A") if eggnog_annotations else "N/A"
-            gos = eggnog_annotations[0].get("GOs", "").split(',') if eggnog_annotations else []
-            Interpro = result.get("InterproScan_annotation", [])
-            current_interpro_annotations = [
-                interpro.get("interpro", "") for interpro in Interpro]
-            
-            """GO display"""
-            # Updating GOs with names
-            go_terms_with_description = []
-            for go_id in gos:
-                description, go_type = go_definitions.get(go_id, ("No description available", ""))
-                highlighted_go_type = f"<span style='background-color: yellow;'>{go_type}</span>"
-                go_terms_with_description.append(f"<p>{go_id} - {highlighted_go_type} - {description}</p>")
-
-            # Limiting at 7 GO terms
-            go_terms_display = go_terms_with_description[:7]
-            if len(go_terms_with_description) > 7:
-                go_terms_display.append("<p>...</p>")  # Adding "..." if exceeding > 7 terms
-
-            go_label = QLabel("".join(go_terms_display))  # Use HTML to join terms
-            go_label.setWordWrap(True)
-            table.setRowHeight(row_idx, 120)  # Adding height for all rows
-            go_label.setStyleSheet("""
-                font-family: 'Roboto', sans-serif;
-                font-size: 12px;
-                color: #333;
-                background-color: #FFEBE1;
-                padding: 5px;
-            """)
-            go_label.setTextFormat(Qt.RichText)  # Enable rich text format
-            go_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-
-
-
-            """InterPRO display"""
-            IPR_label = QLabel("\n".join(current_interpro_annotations))  # Join terms with line breaks
-            IPR_label.setWordWrap(True)  # Enable word wrapping if needed
-
-            IPR_label.setStyleSheet("""
-                font-family: 'Roboto', sans-serif;
-                font-size: 12px;
-                color: #333;
-                background-color: #CACCE4; 
-                padding: 5px;
-            """)# 8083B5 color to test for the background
-            IPR_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-
-            """Tags display"""
-            tags = []
-            if len(gos) > 0:
-                tags.append(("go", len(gos)))
-            if len(result.get("InterproScan_annotation", [])) > 0:
-                tags.append(("interpro", len(result.get("InterproScan_annotation", []))))
-            if len(result.get("blast_hits", [])) > 0:
-                tags.append(("blast", len(result.get("blast_hits", []))))
-
-            classification_tag = "classified" if len(gos) > 10 else "unclassified"
-
-            """Data List"""
-            row_data = [
-                prot_id,preferred_name, eggnog_annotation, classification_tag, prot_length, tags,
-                  None,None,
-                 cog_category,f"EC:{ec_number}",PFAMs
-            ]
-
-            for col_idx, value in enumerate(row_data):
-                if col_idx == 5:
-                    table.setCellWidget(row_idx, col_idx, DataTableManager.create_tag_widget(value))
-                elif col_idx == 3:
-                    table.setCellWidget(row_idx, col_idx, DataTableManager.create_icon_widget(value))
-                elif col_idx == 7:
-                    table.setCellWidget(row_idx, col_idx, go_label)
-                elif col_idx == 6:
-                    table.setCellWidget(row_idx, col_idx, IPR_label)                    
-                else:
-                    table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
-
-        # Adjusting column width
-        for col_idx, header in enumerate(column_headers):
-            if header == "Length":  
-                table.setColumnWidth(col_idx, 50)  
-            elif header == "COG":  
-                table.setColumnWidth(col_idx, 50)    
-            elif header == "Enzyme":  
-                table.setColumnWidth(col_idx, 80)  
-            elif header == "Classification": 
-                table.setColumnWidth(col_idx, 80)  
-            elif header == "Protein ID": 
-                table.setColumnWidth(col_idx, 130)          
-            elif header == "Annotation":  
-                table.setColumnWidth(col_idx, 250)      
-            elif header == "GO ": 
-                table.setColumnWidth(col_idx, 330)     
-            elif header == "InterPro":  
-                table.setColumnWidth(col_idx, 100)
-            elif header == "Preferred name":  
-                table.setColumnWidth(col_idx, 100)                     
-            else:
-                table.setColumnWidth(col_idx, 150) 
+        for i, result in enumerate(parsed_results[:5]): # Show first 5
+            table.insertRow(i)
+            item = QTableWidgetItem(result.get("query_id", "")) # Handle missing key
+            table.setItem(i, 0, item)
 
 
 
 
     @staticmethod
     def populate_additional_table(table: QTableWidget, parsed_results: list):
-        """Remplit une table avec les résultats analysés pour les informations sur les hits."""
-
         addTable_column_headers = [
-            "Hit id", "definition", "accession", "identity", "Alignment length", "E_value", "Bit_score",
-            "QStart", "QEnd", "sStart", "sEnd", "Hsp bit score"
+            "Hit id", "definition", "accession", "identity", "Alignment length", 
+            "E_value", "Bit_score", "QStart", "QEnd", "sStart", "sEnd", "Hsp bit score"
         ]
         table.setHorizontalHeaderLabels(addTable_column_headers)
-        total_hits = sum(len(result["blast_hits"]) for result in parsed_results)
+
+        total_hits = 0
+        for result in parsed_results:
+            if "blast_hits" in result:  # Check if "blast_hits" key exists
+                total_hits += len(result["blast_hits"])
+
         table.setRowCount(total_hits)
 
         row_idx = 0
         for result in parsed_results:
-            for hit in result["blast_hits"]:
-                query_start = hit["query_positions"]["start"]
-                query_end = hit["query_positions"]["end"]
-                subject_start = hit["subject_positions"]["start"]
-                subject_end = hit["subject_positions"]["end"]
-                hit_accession = result.get("hit_accession", "N/A")
-                chunked_value = hit_accession.split("[[taxon")[0].strip()
-                hsp = hit.get("hsps", [])
-                hsp = hit.get("hsps", [])
-                if hsp:
-                    hsp_bitScore = hsp[0].get("bit_score", "N/A")
-                else:
-                    hsp_bitScore = "N/A"
+            if "blast_hits" in result:  # Check AGAIN before iterating over hits
+                for hit in result["blast_hits"]:
+                    query_start = hit.get("query_positions", {}).get("start")  # Handle missing keys
+                    query_end = hit.get("query_positions", {}).get("end")
+                    subject_start = hit.get("subject_positions", {}).get("start")
+                    subject_end = hit.get("subject_positions", {}).get("end")
+                    hit_accession = result.get("hit_accession", "N/A")
+                    chunked_value = hit_accession.split("[[taxon")[0].strip() if hit_accession != "N/A" else "N/A" # Handle split error
+                    hsp = hit.get("hsps", [])
+                    hsp_bitScore = hsp[0].get("bit_score", "N/A") if hsp else "N/A"
 
+                    percent_identity_str = hit.get("percent_identity")
+                    percent_identity = 0.0
+                    if percent_identity_str and str(percent_identity_str).replace(".", "", 1).isdigit():
+                        try:
+                            percent_identity = float(percent_identity_str)
+                        except ValueError:
+                            print(f"Warning: Invalid percent_identity string: {percent_identity_str}")
 
-                #hsp_bitScore = hsp[0].get("bit_score", "N/A")
-                """ 
-                # Vérification et conversion des valeurs numériques
-                try:
-                    
-                    percent_identity = float(hit["percent_identity"]) if hit["percent_identity"] is not None else 0.0
-                    alignment_length = float(hit["alignment_length"]) if hit["alignment_length"] is not None else 1.0  # Éviter la division par zéro
-                    percent_identity_value = (percent_identity / alignment_length) * 100
-                    if percent_identity == "Unknown":
-                        raise ValueError("L'âge ne peut pas être négatif ❌")
-                except (ValueError, ZeroDivisionError):
-                    percent_identity_value = 0.0  # Valeur par défaut appropriée """
+                    alignment_length_str = hit.get("alignment_length")
+                    alignment_length = 1.0
+                    if alignment_length_str and alignment_length_str != "Unknown":
+                        try:
+                            alignment_length = float(alignment_length_str)
+                        except ValueError:
+                            print(f"Warning: Invalid alignment_length string: {alignment_length_str}")
 
-                #identity handling
-                percent_identity_str = hit.get("percent_identity")
-                percent_identity = 0.0
-                if percent_identity_str and str(percent_identity_str).replace(".", "", 1).isdigit(): #Added max one dot
-                    try:
-                        percent_identity = float(percent_identity_str)
-                    except ValueError:
-                        print(f"Warning: Invalid percent_identity string: {percent_identity_str}")
+                    percent_identity_value = (percent_identity / (alignment_length if alignment_length > 0 else 1)) * 100
 
-                alignment_length_str = hit.get("alignment_length")
-                alignment_length = 1.0
-                if alignment_length_str and alignment_length_str != "Unknown":
-                    try:
-                        alignment_length = float(alignment_length_str)
-                    except ValueError:
-                        print(f"Warning: Invalid alignment_length string: {alignment_length_str}")
-
-                percent_identity_value = (percent_identity / (alignment_length if alignment_length > 0 else 1)) * 100
-
-                row_data = [
-                    hit["hit_id"],  # hit_id
-                    #hit["hit_def"],  # hit_def
-                    chunked_value,  # accession
-                    #percent_identity_value,  # percent_identity
-                    percent_identity_value,
-                    alignment_length,  # alignment_length
-                    hit["e_value"],  # e_value
-                    hit["bit_score"],  # bit_score
-                    query_start,  # Query Start
-                    query_end,  # Query End
-                    subject_start,  # Subject Start
-                    subject_end,  # Subject End
-                    hsp_bitScore
-                ]
+                    row_data = [
+                        hit.get("hit_id", "N/A"),  # Use get() and provide default
+                        "N/A",  # definition (not available in your current code)
+                        chunked_value,
+                        percent_identity_value,
+                        alignment_length,
+                        hit.get("e_value", "N/A"),
+                        hit.get("bit_score", "N/A"),
+                        query_start,
+                        query_end,
+                        subject_start,
+                        subject_end,
+                        hsp_bitScore
+                    ]
 
                 for col_idx, value in enumerate(row_data):
                     if col_idx == 3:  # colonne percent_identity avec barre de progression
