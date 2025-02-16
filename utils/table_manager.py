@@ -298,6 +298,7 @@ class DataTableManager:
                 row_data = [
                     hit["hit_id"],  # hit_id
                    # hit["hit_def"],  # hit_def
+                    None,
                     chunked_value,  # accession
                     percent_identity_value,  # percent_identity
                     alignment_length,  # alignment_length
