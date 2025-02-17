@@ -1,1108 +1,394 @@
-from PySide6.QtWidgets import QMainWindow,QScrollArea,QApplication  , QTableWidget,QSplitter ,QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton, QWidget,QGraphicsDropShadowEffect, QMenuBar, QSpacerItem, QSizePolicy, QMessageBox, QDialog,QStatusBar, QTextEdit, QTabWidget, QComboBox   ,QTableWidgetItem,QProgressBar, QRadioButton
-from PySide6.QtGui import QAction, QIcon, QPainter, QColor, QFont
-from PySide6.QtCore import Qt, QTimer, QMetaObject  , QGenericArgument,Slot  , Signal,QObject
-from PySide6 import QtWidgets
+from PySide6.QtWidgets import (
+    QMainWindow, QScrollArea, QApplication, QTableWidget, QSplitter,
+    QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton,
+    QWidget, QGraphicsDropShadowEffect, QMenuBar, QSpacerItem, QSizePolicy,
+    QMessageBox, QDialog, QStatusBar, QTextEdit, QTabWidget, QComboBox,
+    QTableWidgetItem, QProgressBar
+)
+from PySide6.QtGui import (
+    QAction, QIcon, QPainter, QColor, QFont, QPixmap
+)
+from PySide6.QtCore import (
+    Qt, QTimer, QMetaObject, Slot, Signal, QObject, QThread
+)
 from PySide6.QtCharts import QChart, QChartView, QPieSeries
-from utils.table_manager import DataTableManager
-from utils.export_utils import export_to_json, export_to_csv, export_to_tsv
-from ui.donut_widget import Widget
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from pyvis.network import Network
-from utils.OBO_handler import obo
 import json
 import os
-from typing import List, Dict, Any,Tuple # Import type hintsimport asyncio
 import traceback
-from utils.loading.DataLoader import FileLoaderThread 
+from typing import List, Dict, Any, Tuple
+
+from utils.table_manager import DataTableManager
+from utils.export_utils import export_to_json, export_to_csv, export_to_tsv
+from utils.OBO_handler import obo
+from ui.donut_widget import Widget
+from utils.loading.DataLoader import FileLoaderThread
 
 class DynamicTableWindow(QMainWindow):
+    data_loaded = Signal(object)
+    
+    def __init__(self, parsed_results, file_path, parent=None,config=None):
+            # Initialisation correcte de la classe parente
+            super().__init__(parent)
+            
+            # Configuration de la fenêtre
+            self.setWindowTitle("seaGo")
+            self.setGeometry(100, 100, 1400, 850)
+            self.setWindowIcon(QIcon('./assets/image.png'))
+            
+            # Initialisation des variables
+            self.file_path = file_path
+            self.parsed_results = parsed_results
+            self.load_config()
+            obo_file_path = self.config.get("obo_file_path", "./ontologies/go-basic.obo")
+            self.go_definitions = obo.load_go_definitions(obo_file_path)
+            
+            self.config = config if config is not None else {}  # Initialize config
+            self.init_thread()
+            # Configuration de l'interface
+            self.init_ui()
 
-    def __init__(self, parsed_results, file_path, parent=None): 
-        super().__init__()
-        self.setWindowTitle("seaGo")
-        self.setGeometry(100, 100, 1400, 850)
-        self.setWindowIcon(QIcon('./assets/image.png'))
-        self.file_path = file_path  # Store the file_path!  This is the crucial addition.
-        #self.parsed_results = parsed_results  
-        self.parsed_results = None  # Initialize parsed_results
-        self.load_config()
-
-        """main Table"""
-        self.table = QTableWidget()
-        DataTableManager.style_table_headers(self.table,target_column=6)
-        obo_file_path = self.config.get("obo_file_path", "./ontologies/go-basic.obo")
-        self.go_definitions = obo.load_go_definitions(obo_file_path)
-        #DataTableManager.populate_table(self.table, parsed_results,self.go_definitions)
-        #asyncio.run(self.populate_table_async(parsed_results))  # Use asyncio.run for top-level await
-        # Delay the population until after initialization:
-        #todo !!!!
-        #QTimer.singleShot(0, lambda: asyncio.create_task(self.populate_table_async(parsed_results)))
-
-
-        
-
-       
-
-        #additional table
-        self.additional_table = QTableWidget() # Initialize here
-        DataTableManager.style_AdditionalTable_headers(self.additional_table)
-        self.additional_table.setColumnCount(12)
-
-        """Components"""
+    def init_ui(self):
+        """Initialize main UI components"""
+        self.create_main_table()
         self.create_menu_bar()
         self.create_filter_bar()
-        self.row_count_label = QLabel()
-        self.update_row_count()
+        self.create_tab_system()
+        self.create_status_bar()
+        self.connect_signals()
 
-        # Group box to encapsulate the table
-        table_group_box = QGroupBox("")
-        table_group_box_layout = QVBoxLayout()
-        table_group_box_layout.addLayout(self.filter_layout)
-        table_group_box_layout.addWidget(self.table)
-        table_group_box.setLayout(table_group_box_layout)
-        table_group_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+    def create_main_table(self):
+        """Create and configure main table"""
+        self.main_table = DataTableManager.create_table('main')
+        self.table_group_box = QGroupBox("")
+        self.main_table.setObjectName("MainResultsTable")  # Pour le CSS
+        self.main_table.horizontalHeader().setStretchLastSection(True)
+        layout = QVBoxLayout()
+        layout.addWidget(self.main_table)
+        self.table_group_box.setLayout(layout)
 
-        #Tabs creation
+    def create_tab_system(self):
+        """Initialize tab system with splitter"""
         self.tabs = QTabWidget()
-       # self.create_tabs(parsed_results)
-        
+        splitter = QSplitter(Qt.Vertical)
+        splitter.addWidget(self.table_group_box)
+        splitter.addWidget(self.tabs)
+        splitter.setSizes([600, 250])
 
-        #QSplitter
-        splitter = QSplitter()
-        splitter.setOrientation(Qt.Vertical)  # verticale Orientation 
-        splitter.addWidget(table_group_box)  
-        splitter.addWidget(self.tabs)  
-        # initial sizes
-        splitter.setSizes([600, 250]) 
-
-        # main layout
+        main_widget = QWidget()
         main_layout = QVBoxLayout()
         main_layout.addWidget(splitter)
-        container = QWidget()
-        container.setLayout(main_layout)
-        self.setCentralWidget(container)
+        main_widget.setLayout(main_layout)
+        self.setCentralWidget(main_widget)
 
-        # Filters
-        self.dynamic_filters = []
-        self.filter_fields = []
-        self.filter_logic_dropdown = QComboBox()  
-        self.filter_logic_dropdown.addItem('AND')
-        self.filter_logic_dropdown.addItem('OR')
+    def connect_signals(self):
+        """Connect UI signals"""
+        self.main_table.itemChanged.connect(self.update_row_count)
+        self.main_table.cellClicked.connect(self.on_cell_selected)
+        self.main_table.itemSelectionChanged.connect(self.on_selection_changed)
+        self.data_loaded.connect(self.on_data_loaded)
 
-        # status Bar
-        self.create_status_bar()
-
-        self.worker = Worker()
-        self.worker.file_loaded.connect(self.on_file_loaded)
-        self.table.itemSelectionChanged.connect(self.on_protein_selection_changed)
-
-        self.worker.error_occurred.connect(self.handle_file_error)
-        self.worker.progress_updated.connect(self.update_progress_bar)
-
-        self.file_loader_thread = FileLoaderThread(file_path, self.go_definitions)
-        self.file_loader_thread.config = self.config
+    def init_thread(self):
+        """Initialize data loading thread"""
+        self.file_loader_thread = FileLoaderThread(
+            self.file_path,
+            self.config.get("obo_file_path", "./ontologies/go-basic.obo")
+        )
+        self.file_loader_thread.data_loaded.connect(self.handle_data_loaded)
+        self.file_loader_thread.error_occurred.connect(self.handle_error)
         self.file_loader_thread.start()
 
-        #self.show()  # 
-
-        # Connect signals
-        self.table.itemChanged.connect(self.update_row_count)
-        self.table.cellClicked.connect(self.update_description)
-        self.table.cellClicked.connect(self.on_cell_selected)
-
-        self.show()
-
-
-    def on_file_loaded(self, parsed_results: List[Dict[str, Any]]):
-            self.parsed_results = parsed_results
-            self.populate_table_on_main_thread(parsed_results) # Call directly, no invokeMethod
-
+    @Slot(object)
+    def handle_data_loaded(self, data):
+        """Handle loaded data and update UI"""
+        self.parsed_results = data
+        self.data_loaded.emit(data)
 
     @Slot(object)
-    def populate_table_on_main_thread(self, parsed_results: List[Dict[str, Any]]):
-        if parsed_results is None:
-            print("No data received. Check file and parsing logic.")
-            return
+    def on_data_loaded(self, data):
+        """Update UI with new data"""
+        DataTableManager.populate_table(self.main_table, data,self.go_definitions)
+        self.create_dynamic_tabs(data)
+        self.main_table.resizeColumnsToContents()
 
-        print("Parsed Results (First 2 items):")
-        print("Type of parsed_results:", type(parsed_results))
-
-        if parsed_results:
-            DataTableManager.populate_table(self.table, parsed_results, self.go_definitions)
-            self.create_tabs(parsed_results)  # Create tabs after data is loaded
-            self.parsed_results = parsed_results
-            self.table.resizeColumnsToContents()  # Adjust column widths
-        else:
-            QMessageBox.warning(self, "No Data", "No data was loaded from the file.")  # Inform user if no data
-
-
-
-    def update_hits_table(self, blast_hits: List[Dict[str, Any]]):
-        self.update_hits_table_on_main(blast_hits) # Call directly
-
-    @Slot(object) 
-    def update_hits_table_on_main(self, blast_hits: List[Dict[str, Any]]):
-        """This function will run on the main thread"""
-        hits_table_column_headers = [
-            "Hit id", "Definition", "Accession", "Identity", "Alignment length", "E-value", "Bit-score",
-            "QStart", "QEnd", "sStart", "sEnd", "Hsp bit score"
+    def create_dynamic_tabs(self, data):
+        """Create dynamic tabs based on data"""
+        self.tabs.clear()
+        go_terms = data.get('go_terms', []) if isinstance(data, dict) else []
+        tabs = [
+            ('Blast Hits', 'blast', data),
+            ('InterPro Domains', 'interpro', data),
+           # ('GO Terms', 'go', data.get(go_terms)),
+            ('Analysis', 'charts', data)
         ]
+        
+        for title, tab_type, tab_data in tabs:
+            tab = self.create_tab(tab_type, tab_data)
+            if tab:
+                self.tabs.addTab(tab, title)
 
-        self.additional_table.setHorizontalHeaderLabels(hits_table_column_headers)
+    def create_tab(self, tab_type, data):
+        """Create individual tab based on type"""
+        if tab_type == 'blast':
+            return self.create_blast_tab(data)
+        elif tab_type == 'interpro':
+            return self.create_interpro_tab(data)
+        elif tab_type == 'go':
+            return self.create_go_tab(data)
+        elif tab_type == 'charts':
+            return self.create_analysis_tab(data)
+        return None
 
-        total_hits = len(blast_hits)
-        self.additional_table.setRowCount(total_hits)
+    def create_blast_tab(self, data):
+        """Create Blast results tab"""
+        table = DataTableManager.create_table('blast')
+        DataTableManager.populate_table(table, data, self.go_definitions)
+        return self.wrap_table_in_tab(table)
 
-        # Populate the table row by row
-        for row_idx, hit in enumerate(blast_hits):
-            query_start = hit.get("query_positions", {}).get("start", "N/A")
-            query_end = hit.get("query_positions", {}).get("end", "N/A")
-            subject_start = hit.get("subject_positions", {}).get("start", "N/A")
-            subject_end = hit.get("subject_positions", {}).get("end", "N/A")
-            hit_accession = hit.get("accession", "N/A")
-            hsp_bit_score = (hit.get("hsps", [])[:1] or [{}])[0].get("bit_score", "N/A")
+    def create_interpro_tab(self, data):
+        """Create InterPro domains tab"""
+        table = DataTableManager.create_table('interpro')
+        DataTableManager.populate_table(table, data, self.go_definitions)
+        return self.wrap_table_in_tab(table)
 
-            # Identity handling (improved)
-            percent_identity_str = hit.get("percent_identity")
-            percent_identity = 0.0
-            if percent_identity_str and isinstance(percent_identity_str, (int, float, str)): # Check type and convert
-                try:
-                    percent_identity = float(percent_identity_str)
-                except ValueError:
-                    print(f"Warning: Invalid percent_identity string: {percent_identity_str}")
+    def create_go_tab(self, data):
+        """Create GO terms tab"""
+        table = DataTableManager.create_table('go')
+        DataTableManager.populate_table(table, data, self.go_definitions)
+        return self.wrap_table_in_tab(table)
 
-            alignment_length_str = hit.get("alignment_length")
-            alignment_length = 1.0
-            if alignment_length_str and isinstance(alignment_length_str, (int, float, str)) and alignment_length_str != "Unknown": # Check type and convert
-                try:
-                    alignment_length = float(alignment_length_str)
-                except ValueError:
-                    print(f"Warning: Invalid alignment_length string: {alignment_length_str}")
+    def create_analysis_tab(self, data):
+        """Create analysis charts tab"""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        
+        # Add charts and visualizations here
+        layout.addWidget(self.create_donut_chart(data))
+        layout.addWidget(self.create_go_graph(data))
+        
+        tab.setLayout(layout)
+        return tab
 
-            identity = (percent_identity / (alignment_length if alignment_length > 0 else 1)) * 100
+    def wrap_table_in_tab(self, table):
+        """Wrap table in scrollable tab"""
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(table)
+        
+        tab = QWidget()
+        layout = QVBoxLayout()
+        layout.addWidget(scroll)
+        tab.setLayout(layout)
+        return tab
 
-            # row data
-            row_data = [
-                hit.get("hit_id", "N/A"),  # hit_id (handle missing key)
-                hit.get("hit_def", "N/A"), # hit_def (handle missing key)
-                hit_accession,  # accession
-                identity,  # identity
-                hit.get("alignment_length", "N/A"),  # alignment_length (handle missing key)
-                hit.get("e_value", "N/A"),  # e_value (handle missing key)
-                hit.get("bit_score", "N/A"),  # bit_score (handle missing key)
-                query_start,  # Query Start
-                query_end,  # Query End
-                subject_start,  # Subject Start
-                subject_end,  # Subject End
-                hsp_bit_score  # Hsp bit score
-            ]
+    def create_donut_chart(self, data):
+        """Create donut chart visualization"""
+        donut = Widget()
+        donut.setMinimumSize(600, 400)
+        return donut
 
-            for col_idx, value in enumerate(row_data):
-                if col_idx == 3:  # Identity column with progress bar
-                    if isinstance(value, (int, float)) and value != "Unknown":  # Check if value is a valid number
-                        progress = QProgressBar()
-                        progress.setValue(float(value))
-                        progress.setAlignment(Qt.AlignCenter)
-
-                        if float(value) > 90:
-                            progress.setStyleSheet("QProgressBar::chunk {background-color: #8FE388;}")
-                        elif float(value) < 70:
-                            progress.setStyleSheet("QProgressBar::chunk {background-color: #E3AE88;}")
-                        else:
-                            progress.setStyleSheet("QProgressBar::chunk {background-color: #88BCE3;}")
-                        self.additional_table.setCellWidget(row_idx, col_idx, progress)
-                    else:  # Handle cases where identity is not a valid number
-                         item = QTableWidgetItem(str(value)) # Show the value as text
-                         self.additional_table.setItem(row_idx, col_idx, item)
-
-                else:
-                    item = QTableWidgetItem(str(value))
-                    self.additional_table.setItem(row_idx, col_idx, item)
-
-        # column widths
-        for col_idx, header in enumerate(hits_table_column_headers):
-            if header == "Identity":
-                self.additional_table.setColumnWidth(col_idx, 120)
-            elif header == "hit_id":
-                self.additional_table.setColumnWidth(col_idx, 100)
-            else:
-                self.additional_table.setColumnWidth(col_idx, 120)
-
-    def create_tabs(self, parsed_results: List[Dict[str, Any]]):
-        self.create_tabs_on_main(parsed_results) # Call directly
-
-
-
-    @Slot(object) 
-    def create_tabs_on_main(self, parsed_results: List[Dict[str, Any]]):  # Type hint
-            """This function will run on the main thread"""
-            self.tabs.addTab(self.create_tables_tab(parsed_results), "Hits")  # Pass parsed_results
-            self.tabs.addTab(self.create_tables_tab(parsed_results), "Hits") # Pass parsed_results
-            self.tabs.addTab(self.create_Iprscan_tab(parsed_results), "Domains") # Pass parsed_results
-            self.tabs.addTab(self.create_details_tab(), "Details")
-            self.tabs.addTab(self.create_GO_tab(), "GO")
-            self.tabs.addTab(self.create_graphs_tab(), "Donut")
-            self.tabs.addTab(self.create_chart_tab(), "Chart")
-            self.tabs.addTab(self.create_MetaD_tab(), "Metadata")
-            self.generate_go_graph()  # Temp
-            self.tabs.setStyleSheet("""
-                        QTabBar::tab {
-                            color: #333333;
-                            font : Lato;
-                            font-weight: bold;
-                            font-size: 12px ;
-                        }
-                    """)
-
-    def update_description(self, row: int, column: int):
-        self.update_description_on_main(row, column) # Call directly
-
-    @Slot(int, int)  
-    def update_description_on_main(self, row: int, column: int):  # Type hints
-            """This function will run on the main thread"""
-            if column == 2 and self.table.item(row, column) is not None:  # Check if item exists
-                annotation_text = self.table.item(row, column).text()
-                self.description_widget.setText(annotation_text)
-                self.tabs.setCurrentIndex(2)  # Switch to the Details tab (index 2)
-            else:
-                self.description_widget.clear()
-
-    def apply_dynamic_filters(self):
-        self.apply_dynamic_filters_on_main() # Call directly
-
-    @Slot() 
-    def apply_dynamic_filters_on_main(self):
-            """This function will run on the main thread"""
-            logic = self.filter_logic_dropdown.currentText()  # 'AND' or 'OR'
-
-            # List to store valid filter tuples (with column index)
-            valid_filter_fields: List[Tuple[int, str]] = []  # Type hint
-
-            for column_dropdown, filter_input in self.filter_fields[:]:  # Iterate over a copy of the list
-                if filter_input and filter_input.isVisible() and filter_input.parent() is not None:
-                    filter_value = filter_input.text().strip().lower()
-                    if not filter_value:
-                        continue  # Skip empty filters
-
-                    column_index = column_dropdown.currentIndex()
-                    valid_filter_fields.append((column_index, filter_value)) # Store column index and value
-                else:
-                    # Remove deleted filter inputs from self.filter_fields
-                    if (column_dropdown, filter_input) in self.filter_fields:
-                        self.filter_fields.remove((column_dropdown, filter_input))
-
-            # Iterate through table rows and apply filters
-            for row in range(self.table.rowCount()):
-                row_matches = []
-
-                for column_index, filter_value in valid_filter_fields: # Use column index from tuple
-                    item = self.table.item(row, column_index)
-                    if item and filter_value in item.text().strip().lower():
-                        row_matches.append(True)  # Match found
-                    else:
-                        row_matches.append(False) # No match
-
-                # Filter logics
-                if logic == "AND":
-                    row_visible = all(row_matches) if row_matches else True # Empty matches means show the row
-                else:  # OR logic
-                    row_visible = any(row_matches) if row_matches else True # Empty matches means show the row
-
-                self.table.setRowHidden(row, not row_visible)
-
-            # Updating status bar (on main thread)
-            visible_count = sum(not self.table.isRowHidden(row) for row in range(self.table.rowCount()))
-            QMetaObject.invokeMethod(self, "update_status_bar_count", Qt.QueuedConnection,
-                                 QGenericArgument("int", visible_count))  # Wrap
-
-
-
-    @Slot(int) 
-    def update_status_bar_count(self, visible_count):
-        if visible_count == 0:
-            self.statusBar().showMessage("No results found.")
-        else:
-            self.statusBar().showMessage(f"{visible_count} results found.")
-
-
-    def handle_file_error(self, error_message):
-            QMessageBox.critical(self, "Error", error_message)
-
-    def generate_go_graph(self):
+    def create_go_graph(self, data):
         """Generate Pyvis graph in QWebEngine widget dynamically from GO list."""
         file_path = "go_graph.html"  # Temp file
-        
+
         # Liste of go terms to test
         go_terms = "GO:0000981,GO:0003674,GO:0003700,GO:0006355,GO:0006357,GO:0008150,GO:0009889,GO:0010468,GO:0010556,GO:0019219,GO:0019222,GO:0031323,GO:0031326,GO:0050789,GO:0050794,GO:0051171,GO:0051252,GO:0060255,GO:0065007,GO:0080090,GO:0140110,GO:1903506,GO:2000112,GO:2001141"
         go_list = go_terms.split(",")
 
-        #graphe Pyvis
-        net = Network(height="750px", width="100%", directed=True)
+        try:
+            # Pyvis graph
+            net = Network(height="750px", width="100%", directed=True)
 
-        # nodes
-        for go in go_list:
-            net.add_node(go, label=go)
+            # Add nodes
+            for go in go_list:
+                net.add_node(go, label=go)
 
-        # simple edges
-        for i in range(len(go_list) - 1):
-            net.add_edge(go_list[i], go_list[i + 1])
+            # Add simple edges
+            for i in range(len(go_list) - 1):
+                net.add_edge(go_list[i], go_list[i + 1])
 
-        # HTML generation
-        net.write_html(file_path)
+            # Generate HTML content
+            net.write_html(file_path)
 
-        # read
-        with open(file_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
+            # Check if file was created
+            if not os.path.exists(file_path):
+                print("Error: The HTML file was not created successfully.")
+                return None
 
-        # display QWebEngineView
-        web_view = QWebEngineView()
-        web_view.setHtml(html_content)
+            # Read the generated HTML file
+            with open(file_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
 
-        graph_tab = QWidget()
-        layout = QVBoxLayout()
-        layout.addWidget(web_view)
-        graph_tab.setLayout(layout)
+            if not html_content:
+                print("Error: HTML content is empty.")
+                return None
 
-        self.tabs.addTab(graph_tab, "GO Graph")
+            # Display in QWebEngineView
+            web_view = QWebEngineView()
+            web_view.setHtml(html_content)
 
-    """     def on_protein_selection_changed(self):
-        #Updates the hits table based on the selected protein.
-        selected_items = self.table.selectedItems()
-        if not selected_items:
-            return  
+            # Create and set up the widget layout
+            graph_tab = QWidget()
+            layout = QVBoxLayout()
+            layout.addWidget(web_view)
+            graph_tab.setLayout(layout)
 
-        selected_row = selected_items[0].row()
-
-        selected_protein = self.parsed_results[selected_row]  
-        print(f"Selected protein: {selected_protein}") 
-
-        blast_hits = selected_protein.get("blast_hits", [])
-        
-        self.update_hits_table(blast_hits) """
-
-    def on_protein_selection_changed(self):
-        selected_items = self.table.selectedItems()
-        if selected_items:  # Simplified check
-            selected_row = selected_items[0].row()
-            if self.parsed_results and 0 <= selected_row < len(self.parsed_results):
-                selected_protein = self.parsed_results[selected_row]
-                print(f"Selected protein: {selected_protein}")
-                blast_hits = selected_protein.get("blast_hits", [])
-                self.update_hits_table(blast_hits)
-            else:
-                print("Error: self.parsed_results is not available or invalid row selected")
-                traceback.print_exc()
-
-    """ def update_hits_table(self, blast_hits):
-        # Define column headers as in the 'populate_additional_table' function
-        hits_table_column_headers = [
-            "Hit id", "Definition", "Accession", "Identity", "Alignment length", "E-value", "Bit-score",
-            "QStart", "QEnd", "sStart", "sEnd", "Hsp bit score"
-        ]
-        
-        self.additional_table.setHorizontalHeaderLabels(hits_table_column_headers)
-        
-        total_hits = len(blast_hits)
-        self.additional_table.setRowCount(total_hits)
-
-        # Populate the table row by row
-        for row_idx, hit in enumerate(blast_hits):
-            query_start = hit.get("query_positions", {}).get("start", "N/A")
-            query_end = hit.get("query_positions", {}).get("end", "N/A")
-            subject_start = hit.get("subject_positions", {}).get("start", "N/A")
-            subject_end = hit.get("subject_positions", {}).get("end", "N/A")
-            hit_accession = hit.get("accession", "N/A")
-            #hsp_bit_score = hit.get("hsps", [{}])[0].get("bit_score", "N/A")
-            hsp_bit_score = (hit.get("hsps", [])[:1] or [{}])[0].get("bit_score", "N/A")
-            #identity = (float(hit.get("percent_identity", 0)) / float(hit.get("alignment_length", 1))) * 100
+            self.tabs.addTab(graph_tab, "GO Graph")
             
-            #identity handling
-            percent_identity_str = hit.get("percent_identity")
-            percent_identity = 0.0
-            if percent_identity_str and str(percent_identity_str).replace(".", "", 1).isdigit(): #Added max one dot
-                try:
-                    percent_identity = float(percent_identity_str)
-                except ValueError:
-                    print(f"Warning: Invalid percent_identity string: {percent_identity_str}")
+            return graph_tab  # Ensure the graph tab is returned
 
-            alignment_length_str = hit.get("alignment_length")
-            alignment_length = 1.0
-            if alignment_length_str and alignment_length_str != "Unknown":
-                try:
-                    alignment_length = float(alignment_length_str)
-                except ValueError:
-                    print(f"Warning: Invalid alignment_length string: {alignment_length_str}")
+        except Exception as e:
+            print(f"Error generating or displaying the GO graph: {e}")
+            return None
 
-            identity = (percent_identity / (alignment_length if alignment_length > 0 else 1)) * 100
-
-            # row data
-            row_data = [
-                hit["hit_id"],  # hit_id
-               # hit["hit_def"],  # hit_def
-                hit_accession,  # accession
-                identity,  # identity
-                hit["alignment_length"],  # alignment_length
-                hit["e_value"],  # e_value
-                hit["bit_score"],  # bit_score
-                query_start,  # Query Start
-                query_end,  # Query End
-                subject_start,  # Subject Start
-                subject_end,  # Subject End
-                hsp_bit_score  # Hsp bit score
-            ]
-
-            for col_idx, value in enumerate(row_data):
-                if col_idx == 3:  # Identity column with progress bar
-                    if value != "Unknown":    
-                        progress = QProgressBar()
-                        progress.setValue(float(value))
-                        progress.setAlignment(Qt.AlignCenter)
-
-                        if float(value) > 90:
-                                progress.setStyleSheet("QProgressBar::chunk {background-color: #8FE388;}")
-                        elif float(value) < 70:
-                                progress.setStyleSheet("QProgressBar::chunk {background-color: #E3AE88;}")
-                        else:
-                                progress.setStyleSheet("QProgressBar::chunk {background-color: #88BCE3;}")
-                        self.additional_table.setCellWidget(row_idx, col_idx, progress)
-                else:
-                    item = QTableWidgetItem(str(value))
-                    self.additional_table.setItem(row_idx, col_idx, item)
-
-        # column widths
-        for col_idx, header in enumerate(hits_table_column_headers):
-            if header == "Identity":
-                self.additional_table.setColumnWidth(col_idx, 120)
-            elif header == "hit_id":
-                self.additional_table.setColumnWidth(col_idx, 100)
-            else:
-                self.additional_table.setColumnWidth(col_idx, 120) """
-
-
-
-    """     def create_tabs(self, parsed_results):  # Pass parsed_results here
-            #tabs for hits, graphs, metadata ..
-            self.tabs.addTab(self.create_tables_tab(parsed_results), "Hits") # Pass parsed_results
-            self.tabs.addTab(self.create_Iprscan_tab(parsed_results), "Domains") # Pass parsed_results
-            self.tabs.addTab(self.create_details_tab(), "Details")
-            self.tabs.addTab(self.create_GO_tab(), "GO")
-            self.tabs.addTab(self.create_graphs_tab(), "Donut")
-            self.tabs.addTab(self.create_chart_tab(), "Chart")
-            self.tabs.addTab(self.create_MetaD_tab(), "Metadata")
-            self.generate_go_graph()  # Temp
-            """
-
-    def create_details_tab(self):
-            self.description_widget = QTextEdit()  # Create description_widget
-            self.description_widget.setReadOnly(True)
-            self.description_widget.setPlaceholderText("Select a cell to view annotation details...")
-            tab_details = QWidget()
-            tab_details_layout = QVBoxLayout()
-            tab_details_layout.addWidget(self.description_widget)
-            tab_details.setLayout(tab_details_layout)
-            return tab_details
-            
-
-
-
-    def create_MetaD_tab(self):
-            description_widget = QLabel("Metadata will be displayed here...")
-            description_widget.setAlignment(Qt.AlignCenter)
-            tab_graphs = QWidget()
-            tab_graphs_layout = QVBoxLayout()
-            tab_graphs_layout.addWidget(description_widget)
-            tab_graphs.setLayout(tab_graphs_layout)
-            self.tabs.addTab(tab_graphs, "Graphs")
-            return tab_graphs
-    
-
-    def create_graphs_tab(self):
-        donut_chart_widget = Widget() 
-        donut_chart_widget.setMinimumSize(600, 600) 
-        donut_chart_widget.setMaximumSize(900, 600) 
-
-        #  scroll area
-        scroll_area = QScrollArea()
-        scroll_area.setWidget(donut_chart_widget)  
-        scroll_area.setWidgetResizable(True) 
-
-        tab_graphs = QWidget()
-        tab_graphs_layout = QVBoxLayout()
-
-        scroll_layout = QHBoxLayout()
-        scroll_layout.addWidget(scroll_area)  
-     
-
-        tab_graphs_layout.addLayout(scroll_layout)  
-        tab_graphs.setLayout(tab_graphs_layout)
-
-        tab_graphs.setMinimumSize(800, 300)  
-   
-
-        return tab_graphs
-
-    #temp
-    def create_chart_tab(self):
-        """distribution graph to test"""
-        chart = QChart() 
-        series = QPieSeries()
-
-        series.append("With Blast Hits", 60)
-        series.append("With GO Mapping", 20)
-        series.append("Manually Annotated", 10)
-        series.append("Blasted Without hits", 10)
-
-        chart.addSeries(series)
-        chart.setTitle("Query distrubition")
-        
-        #title
-        chart.setTitleBrush(QColor("#4F518C")) 
-        chart.setTitleFont(QFont("Roboto", 14, QFont.Bold)) 
-
-        series.slices()[0].setBrush(QColor("#077187")) 
-        series.slices()[1].setBrush(QColor("#4F518C")) 
-        series.slices()[2].setBrush(QColor("#ED7D3A"))  
-        series.slices()[3].setBrush(QColor("#D0D0D0"))  
-
-        chart_view = QChartView(chart)
-        chart_view.setRenderHint(QPainter.Antialiasing)
-
-        scroll_area = QScrollArea()
-        scroll_area.setWidget(chart_view)
-        scroll_area.setWidgetResizable(True)
-
-        tab_graphs = QWidget()
-        tab_graphs_layout = QVBoxLayout()
-
-
-        scroll_layout = QHBoxLayout()
-        scroll_layout.addWidget(scroll_area)
-
-        tab_graphs_layout.addLayout(scroll_layout)
-
-        tab_graphs_layout.setContentsMargins(10, 10, 10, 10)  
-        tab_graphs_layout.setSpacing(10) 
-        tab_graphs.setLayout(tab_graphs_layout)
-
-
-        return tab_graphs
-
-
-    def create_tables_tab(self, parsed_results):
-            """hits table"""
-            self.additional_table = QTableWidget()
-            DataTableManager.style_AdditionalTable_headers(self.additional_table)
-            self.additional_table.setColumnCount(12)
-            DataTableManager.populate_additional_table(self.additional_table, parsed_results)
-
-            tab_tables = QWidget()
-            tab_tables_layout = QVBoxLayout()
-            tab_tables_layout.addWidget(self.additional_table)
-            tab_tables.setLayout(tab_tables_layout)
-
-
-            tab_tables.setStyleSheet("""
-                QTabBar::tab {
-                    background: #077187;       /* Couleur de l'onglet par défaut */
-                    color: black;                /* Couleur du texte */
-                    padding: 5px;                /* Marges intérieures */
-                }
-                QTabBar::tab:hover {
-                    background: lightgreen;      /* Couleur au survol */
-                }
-            """)
-            return tab_tables
-
-    def create_Iprscan_tab(self, parsed_results):
-            """IPRscan Table tab'"""
-            self.Iprsca_table = QTableWidget()
-            DataTableManager.style_IprscanTable_headers(self.Iprsca_table)
-            self.Iprsca_table.setColumnCount(12)
-            DataTableManager.populate_interproscan_table(self.Iprsca_table, parsed_results)
-
-            tab_Iprscan = QWidget()
-            tab_Iprscan_layout = QVBoxLayout()
-            tab_Iprscan_layout.addWidget(self.Iprsca_table)
-            tab_Iprscan.setLayout(tab_Iprscan_layout)
-            return tab_Iprscan
-                
-    def create_GO_tab(self):
-            obo_file_path = "./ontologies/go-basic.obo"  #TO-DO obo file should be moved to config.Json !!
-
-            go_data = obo.load_go_terms(obo_file_path)
-            self.GO_table = QTableWidget()
-            DataTableManager.style_IprscanTable_headers(self.GO_table)
-            self.GO_table.setColumnCount(9)
-            DataTableManager.populate_GO_table(self.GO_table, go_data)
-
-            tab_go = QWidget()
-            tab_go_layout = QVBoxLayout()
-            tab_go_layout.addWidget(self.GO_table)
-            tab_go.setLayout(tab_go_layout)
-            return tab_go
-                
-
-    def update_description(self, row, column):
-            """Update the description widget with details from the selected cell."""
-            if column == 2 and self.table.item(row, column) is not None:  # Check if item exists
-                annotation_text = self.table.item(row, column).text()
-                self.description_widget.setText(annotation_text)
-                self.tabs.setCurrentIndex(2)  # Switch to the Details tab (index 2)
-            else:
-                self.description_widget.clear()
-
-
-   
-
-    """****************************************** Bar components *********************************************"""
 
     def create_menu_bar(self):
-        # menu bar creation
+        """Create main menu bar"""
         menu_bar = QMenuBar(self)
-        self.setMenuBar(menu_bar)  
-
-        # style CSS
-        menu_bar.setStyleSheet("""
-            QMenuBar {
-                background-color: #D7D7D7; 
-                color: #333333;
-                font-family: Roboto;
-                font-weight: bold;
-                font-size: 12px;               
-            }
-
-            QMenuBar::item {
-                background-color: transparent; 
-                padding: 5px 10px; 
-            }
-
-            QMenuBar::item:selected {
-                background-color: #7393B3; 
-                border-radius: 4px; 
-            }
-
-            QMenu {
-                background-color: #D7D7D7; 
-                color: #333333; 
-                border: 1px solid #444444; 
-                margin: 2px;
-            }
-
-            QMenu::item {
-                background-color: transparent;
-                padding: 5px 20px; 
-                font-size: 13px; 
-            }
-
-            QMenu::item:selected {
-                background-color: #7393B3;
-                color: #FFD700;
-            }
-
-            QMenu::separator {
-                height: 2px; 
-                background-color: #444444;
-                margin: 4px 10px; 
-            }
-        """)
-
-        # shaddow effect
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(10) 
-        shadow.setXOffset(0)
-        shadow.setYOffset(3)  
-        shadow.setColor(QColor(0, 0, 0, 80)) 
-
-        menu_bar.setGraphicsEffect(shadow)
-
-        ### --- MENU ITEMS --- ###
         
-        # Menu File
+        # File menu
         file_menu = menu_bar.addMenu("File")
-        open_action = QAction("Open", self)
-        exit_action = QAction("Exit", self)
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(open_action)
-        file_menu.addAction(exit_action)
+        file_menu.addAction(QAction("Open", self))
+        file_menu.addAction(QAction("Exit", self, triggered=self.close))
 
-        # Menu Export
+        # Export menu
         export_menu = menu_bar.addMenu("Export")
-        export_json_action = QAction("Export to JSON", self)
-        export_json_action.triggered.connect(lambda: export_to_json(self.table))
-        export_menu.addAction(export_json_action)
+        export_types = [
+            ("JSON", export_to_json),
+            ("CSV", export_to_csv),
+            ("TSV", export_to_tsv)
+        ]
+        for name, handler in export_types:
+            export_menu.addAction(
+                QAction(f"Export to {name}", self, triggered=lambda: handler(self.main_table))
+            )
 
-        export_csv_action = QAction("Export to CSV", self)
-        export_csv_action.triggered.connect(lambda: export_to_csv(self.table))
-        export_menu.addAction(export_csv_action)
-
-        export_tsv_action = QAction("Export to TSV", self)
-        export_tsv_action.triggered.connect(lambda: export_to_tsv(self.table))
-        export_menu.addAction(export_tsv_action)
-
-        # Menu Help
+        # Help menu
         help_menu = menu_bar.addMenu("Help")
-        about_action = QAction("About", self)
-        about_action.triggered.connect(self.show_about_dialog)
-        help_menu.addAction(about_action)
-
-        #to-complete
-        # other menu 
-        tools_menu = menu_bar.addMenu("Tools")
-        view_menu = menu_bar.addMenu("View")
-
-        return menu_bar  
-
+        help_menu.addAction(QAction("About", self, triggered=self.show_about))
+        
+        self.setMenuBar(menu_bar)
 
     def create_filter_bar(self):
-        self.filter_layout = QHBoxLayout()
+        """Create dynamic filter bar"""
+        filter_bar = QWidget()
+        layout = QHBoxLayout()
+        
+        self.filter_input = QLineEdit()
+        self.filter_input.setPlaceholderText("Filter results...")
+        
+        self.filter_type = QComboBox()
+        self.filter_type.addItems(["Protein ID", "Description", "GO Terms"])
+        
+        layout.addWidget(QLabel("Filter by:"))
+        layout.addWidget(self.filter_type)
+        layout.addWidget(self.filter_input)
+        layout.addWidget(QPushButton("Apply", clicked=self.apply_filters))
+        
+        filter_bar.setLayout(layout)
+        self.table_group_box.layout().insertWidget(0, filter_bar)
 
-        self.open_dialog_button = QPushButton("Filter")
-        self.open_dialog_button.setIcon(QIcon("./assets/dialog-icon.png"))
-        self.open_dialog_button.clicked.connect(self.open_dialog)
-        self.filter_layout.addWidget(self.open_dialog_button)
-
-        # Style
-        self.setStyleSheet("""
-        QLineEdit {
-            border: 1px solid #D3D3D3;
-            border-radius: 3px;
-            padding: 3px;
-        }
-        QPushButton {
-            background-color: #C0C0C0;
-            color: black;
-            border-radius: 3px;
-            font-weight: bold ;
-            padding: 5px 10px;
-        }
-        QPushButton:hover {
-            background-color: #7393B3;
-        }
-        QLabel {
-            font-weight: bold;
-        }
-        """)
-    
+    def apply_filters(self):
+        """Apply dynamic filters to table"""
+        column = self.filter_type.currentIndex()
+        text = self.filter_input.text().lower()
+        DataTableManager.apply_filter(self.main_table, column, text)
 
     def create_status_bar(self):
-            self.status_bar = QStatusBar()
-            self.setStatusBar(self.status_bar)
+        """Create application status bar"""
+        status = QStatusBar()
+        self.progress = QProgressBar()
+        self.progress.hide()
+        
+        status.addPermanentWidget(QLabel("Status:"))
+        status.addPermanentWidget(self.progress)
+        self.setStatusBar(status)
 
-            # Row count label
-            #self.row_count_label = QLabel(self.row_count_label)
-            self.status_bar.addPermanentWidget(self.row_count_label)
+    @Slot(int)
+    def update_progress(self, value):
+        """Update progress bar"""
+        self.progress.show()
+        self.progress.setValue(value)
+        if value >= 100:
+            self.progress.hide()
 
-            # Clock
-            self.clock_label = QLabel()
-            self.status_bar.addPermanentWidget(self.clock_label)
-            self.update_time()  # Initial time update
-            self.timer = QTimer(self)
-            self.timer.timeout.connect(self.update_time)
-            self.timer.start(1000)
+    @Slot(int, int)
+    def on_cell_selected(self, row, column):
+        """Handle cell selection"""
+        if item := self.main_table.item(row, column):
+            self.show_details(item.text())
 
-            # Progress bar
-            self.progress_bar = QProgressBar()
-            self.progress_bar.setMaximumWidth(200)
-            self.progress_bar.setVisible(False)
-            self.status_bar.addPermanentWidget(self.progress_bar)
+    def show_details(self, content):
+        """Show details in dedicated tab"""
+        if not hasattr(self, 'details_tab'):
+            self.details_tab = QTextEdit()
+            self.details_tab.setReadOnly(True)
+            self.tabs.addTab(self.details_tab, "Details")
+        self.details_tab.setText(content)
+        self.tabs.setCurrentWidget(self.details_tab)
 
-            # Status bar style
-            self.status_bar.setStyleSheet("""
-                QStatusBar {
-                    background-color: #0B4F6C;
-                    color: #FFFFFF;
-                    font-weight: bold;
-                    font-size: 12px;
-                    border-top: 2px solid #86BBD8;
-                }
-                QLabel {
-                    color: #93FF96;
-                    font-weight: bold;
-                    font-size: 12px;
-                }
-            """)
+    @Slot()
+    def on_selection_changed(self):
+        """Handle row selection changes"""
+        if selected := self.main_table.selectedItems():
+            row = selected[0].row()
+            self.update_blast_results(row)
 
+    def update_blast_results(self, row):
+        """Update Blast results for selected row"""
+        if not self.parsed_results:
+            return
+            
+        protein_data = self.parsed_results[row]
+        if blast_hits := protein_data.get('blast_hits'):
+            if blast_tab := self.tabs.findChild(QTableWidget, 'blast'):
+                DataTableManager.populate_table(blast_tab, blast_hits, self.go_definitions)
 
-    """************************************** Dialogs  *********************************************"""
+    def load_config(self):
+        """Load application configuration"""
+        config_file = "./config.json"
+        try:
+            with open(config_file, 'r') as f:
+                self.config = json.load(f)
+        except FileNotFoundError:
+            self.config = {}
+            print(f"Config file {config_file} not found")
+
+    @Slot(str)
+    def handle_error(self, message):
+        """Show error message dialog"""
+        error_dialog = QMessageBox(self)
+        error_dialog.setIcon(QMessageBox.Critical)
+        error_dialog.setWindowTitle("Error")
+        error_dialog.setText(f"Data loading failed: {message}")
+        error_dialog.exec()
+
+    def show_about(self):
+        """Show about dialog"""
+        about_dialog = QMessageBox(self)
+        about_dialog.setWindowTitle("About seaGo")
+        about_dialog.setText("Bioinformatics data visualization tool")
+        about_dialog.exec()
+
+    def update_row_count(self):
+            row_count = self.main_table.rowCount()
+            print(f"Row count updated: {row_count}")
+
+    """   def init_thread(self):
+        # Access config safely
+        obo_file_path = self.config.get("obo_file_path", "./ontologies/go-basic.obo")
+        print(f"OBO file path: {obo_file_path}")
+        # Add other initialization logic here """
     
-    def show_about_dialog(self):
-        """Todo : a informative about section !!"""
-        print("BLAST Table Example Application for testing UI.")
-
-    #to review
-    def show_annotation_dialog(self, row, column):
-        if column == 2:
-            content = self.table.item(row, column).text()
-
-            width = min(300, max(150, len(content) * 6)) 
-            height = min(200, max(50, len(content.splitlines()) * 20))
-
-            dialog = QDialog(self)
-            dialog.setWindowTitle("Annotation Details")
-            dialog.resize(width, height)
-
-            text_edit = QTextEdit(dialog)
-            text_edit.setText(content)
-            text_edit.setReadOnly(True)
-            dialog.setStyleSheet("""
-            QDialog {
-                background-color: #f9f9f9;
-                border: 2px solid #cccccc;
-            }
-            QTextEdit {
-                background-color: #ffffff;
-                color: #333333;
-                font-size: 14px;
-                font-family: 'Arial';
-                padding: 5px;
-                border: none;
-            }
-        """)
-
-
-            layout = QVBoxLayout()
-            layout.addWidget(text_edit)
-
-            dialog.setLayout(layout)
-
-            dialog.exec()     
-
-
-    def open_dialog(self):
-        dialog = QDialog()
-        #to review
-        dialog.deleteLater()  # Marks the widget for deletion
-        dialog.setWindowTitle("Filter options")
-        dialog.setWindowIcon(QIcon('./assets/image.png'))
-
-        dialog.setFixedSize(400, 300)  
-
-        dialog.setStyleSheet("""
-            QDialog {
-                background-color: #D7D7D7; 
-                color: white;              
-                border-radius: 10px;       
-            }
-            QLabel {
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QLineEdit {
-                background-color: white;
-                border: 1px solid #077187;
-                border-radius: 5px;
-                padding: 5px;
-                color: #000;
-            }
-            QPushButton {
-                background-color: #077187;
-                color: white;
-                border-radius: 5px;
-                padding: 5px 10px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #ED7D3A;
-            }
-            QPushButton:pressed {
-                background-color: #4F518C;
-            }
-        """)
-
-        dialog_layout = QVBoxLayout()
-
-        dialog_input = QLineEdit()
-        dialog_input.setPlaceholderText("Enter your filter value")
-        dialog_layout.addWidget(dialog_input)
-
-        add_filter_button = QPushButton("Add Filter")
-        add_filter_button.setIcon(QIcon("./assets/filter.png"))
-        add_filter_button.clicked.connect(self.add_filter_field)
-        dialog_layout.addWidget(add_filter_button)
-
-        clear_button = QPushButton("Clear All Filters")
-        clear_button.setIcon(QIcon("./assets/clear-filter.png"))
-        clear_button.clicked.connect(self.clear_filters)
-        dialog_layout.addWidget(clear_button)
-
-        ok_button = QPushButton("OK")
-        ok_button.clicked.connect(dialog.accept)  
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(add_filter_button)
-        button_layout.addWidget(clear_button)
-        button_layout.addWidget(ok_button)
-
-        dialog_layout.addWidget(add_filter_button)
-        dialog_layout.addWidget(clear_button)
-        dialog_layout.addWidget(ok_button)
-
-        dialog_layout.addLayout(button_layout)
+    def closeEvent(self, event):
+        """Ensure the thread is stopped before closing the application."""
+        if hasattr(self, 'file_loader_thread') and self.file_loader_thread.isRunning():
+            self.file_loader_thread.quit()
+            self.file_loader_thread.wait()  # Ensure thread stops before exiting
+        event.accept()
 
        
-        dialog.setLayout(dialog_layout)
-
-        dialog.exec()
-
-
-    """************************************** Gestion des filters  **********************************"""
-
-    def add_filter_field(self):
-        """dynamique filter based on table headers"""
-        filter_row_layout = QHBoxLayout()  
-
-        column_dropdown = QComboBox()
-        column_headers = [self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())]
-        column_dropdown.addItems(column_headers)
-
-        filter_input = QLineEdit()
-        filter_input.setPlaceholderText("Enter filter value...")
-
-        remove_button = QPushButton("Remove")
-        remove_button.setIcon(QIcon("./assets/trash.png"))
-        remove_button.clicked.connect(lambda: self.remove_filter_field(filter_row_layout))
-
-        filter_row_layout.addWidget(QLabel("Column:"))
-        filter_row_layout.addWidget(column_dropdown)
-        filter_row_layout.addWidget(filter_input)
-        filter_row_layout.addWidget(remove_button)
-
-        self.filter_layout.addLayout(filter_row_layout)
-
-        # stocking widget to apply filter after
-        self.filter_fields.append((column_dropdown, filter_input))
-
-        filter_input.textChanged.connect(self.apply_dynamic_filters)
-
-    def remove_filter_field(self, filter_layout):
-        """delete an input of dynamique filter."""
-        # deleting all the widgets of the layout
-        for i in reversed(range(filter_layout.count())):
-            widget = filter_layout.itemAt(i).widget()
-            if widget:
-                widget.setParent(None)  # detaching from the layout=
-                widget.deleteLater()   # Planning the supression
-
-        # Remove the layout itself
-        parent_widget = filter_layout.parentWidget()
-        if parent_widget and isinstance(parent_widget.layout(), QtWidgets.QLayout):
-            parent_layout = parent_widget.layout()
-            parent_layout.removeItem(filter_layout)
-        
-        # Clean dynamic filter list
-        self.filter_fields = [
-            (column_dropdown, filter_input)
-            for column_dropdown, filter_input in self.filter_fields
-            if filter_input and filter_input.parent() is not None
-        ]
-
-
-
-    """ def apply_dynamic_filters(self):
-
-        logic = self.filter_logic_dropdown.currentText()  # 'AND' or 'OR'
-
-        # List to store valid filters
-        valid_filter_fields = []
-
-        # itering all rows in the table
-        for row in range(self.table.rowCount()):
-            row_matches = []
-            
-            for column_dropdown, filter_input in self.filter_fields[:]:  #Iterate over a copy of the list
-                # Check if filter_input still exists and is valid
-                if filter_input and filter_input.isVisible() and filter_input.parent() is not None:
-                    filter_value = filter_input.text().strip().lower()
-                    if not filter_value:
-                        continue
-
-                    column_index = column_dropdown.currentIndex()
-                    item = self.table.item(row, column_index)
-                    row_matches.append(item and filter_value in item.text().strip().lower())
-                else:
-                    # If filter_input is deleted, we remove it from filter_fields
-                    if (column_dropdown, filter_input) in self.filter_fields:
-                        self.filter_fields.remove((column_dropdown, filter_input))
-
-            # Filter logique
-            if logic == "AND":
-                row_visible = all(row_matches) if row_matches else True
-            else:
-                row_visible = any(row_matches) if row_matches else True
-
-            self.table.setRowHidden(row, not row_visible)
-
-        # updating status bar
-        visible_count = sum(not self.table.isRowHidden(row) for row in range(self.table.rowCount()))
-        if visible_count == 0:
-            self.statusBar().showMessage("No results found.")
-        else:
-            self.statusBar().showMessage(f"{visible_count} rows visible.") """
-
-
-    def clear_filters(self):
-        """Clears all filters from the table."""
-        for column_dropdown, filter_input in self.filter_fields[:]:
-            if filter_input and filter_input.parent() is not None:
-                filter_input.clear()
-            else:
-                self.filter_fields.remove((column_dropdown, filter_input))
-
-        #display
-        for row in range(self.table.rowCount()):
-            self.table.setRowHidden(row, False)
-
-        # status bar
-        self.statusBar().showMessage("Filters cleared.")
-
-
-    #to review
-    def reset_table_visibility(self):
-        """Reset the visibility of all rows in the table."""
-        for row in range(self.table.rowCount()):
-            self.table.setRowHidden(row, False)
-
-
-    
-    """************************************** Gestion de la status bar **********************************"""
-    
-    def on_cell_selected(self, row, column):
-        """updating status bar whith selected element"""
-        item = self.table.item(row, column)
-        if item:  # verifying if the cell is not empty
-            selected_text = item.text()
-            self.status_bar.showMessage(f"Élément sélectionné : {selected_text}")
-        else:
-            self.status_bar.showMessage("Aucun élément sélectionné.")
-
-    def update_time(self):
-        """Update the clock in the status bar."""
-        from datetime import datetime
-        current_time = datetime.now().strftime("%H:%M:%S")
-        self.clock_label.setText(f"Time: {current_time}")
-
-    def start_progress_bar(self, maximum):
-        """Display and initialize the progress bar."""
-        self.progress_bar.setValue(0)
-        self.progress_bar.setMaximum(maximum)
-        self.progress_bar.setVisible(True)
-
-    def update_progress_bar(self, value):
-        """Update the progress bar value."""
-        self.progress_bar.setValue(value)
-        self.statusBar().showMessage(f"Loading: {value}%") # or set a progress bar widget
-        if value == self.progress_bar.maximum():
-            self.progress_bar.setVisible(False)
-            self.status_message.setText("Task completed successfully!")
-
-    #to-review            
-    def update_row_count(self):
-        """Update the row count label to display the number of visible rows."""
-        visible_rows = sum(not self.table.isRowHidden(row) for row in range(self.table.rowCount()))
-        self.row_count_label.setText(f"Rows displayed: {visible_rows}")
-
-
-    """***************************** utils  *********************************************"""   
-    
     def load_config(self):
         """Charger la configuration depuis le fichier JSON"""
         config_file = "./config.json"
@@ -1113,20 +399,4 @@ class DynamicTableWindow(QMainWindow):
             print(f"Le fichier de configuration {config_file} est introuvable.")
             self.config = {}
 
-        
-class Worker(QObject):  # Define Worker class
-    file_loaded = Signal(object)  # Signal for file loaded
-    error_occurred = Signal(str)  # Signal for errors
-    progress_updated = Signal(int) # Signal for progress
-
-    def __init__(self):
-        super().__init__()
-
-    def load_data(self, data):
-        self.file_loaded.emit(data)  # Emit signal when done
-
-    def handle_error(self, message):
-        self.error_occurred.emit(message)
-
-    def update_progress(self, progress):
-        self.progress_updated.emit(progress)
+    

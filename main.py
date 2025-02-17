@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QMainWindow, QFileDialog, QMessageBox,
 
 from utils.data_loader import load_parsed_blast_hits  # Make sure this path is correct
 from ui.table_window import DynamicTableWindow  # And this one
-
+import timeit
 class AppSignals(QObject):
     progress_updated = Signal(int, str)
     error_occurred = Signal(str)
@@ -170,7 +170,10 @@ def main():
     asyncio.set_event_loop(loop)
 
     controller = AppController(app)
+    start_time = timeit.default_timer()
     controller.open_file()  # Start the process
+    end_time = timeit.default_timer()
+    print(f"Temps de chargement : {end_time - start_time:.6f} secondes")
 
     with loop:
         loop.run_forever()

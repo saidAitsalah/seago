@@ -1,321 +1,451 @@
 from PySide6.QtWidgets import (
-    QTableWidget, QTableWidgetItem, QHBoxLayout, QLabel, QWidget, QHeaderView, QProgressBar
+    QTableWidget, QTableWidgetItem, QHBoxLayout, QLabel, 
+    QWidget, QHeaderView, QProgressBar
 )
 from PySide6.QtGui import QPixmap, QColor, QBrush
 from PySide6.QtCore import Qt
-
-
+import itertools
 
 class DataTableManager:
-
     ICON_PATHS = {
         "classified": "assets/settings.png",
         "unclassified": "assets/edit.png"
     }
 
-    HEADER_STYLE = """
-        QHeaderView::section {
-            background-color: #D7D7D7;
-            color: #333333;
-            font : Roboto;
-            font-weight: bold;
-            font-size: 12px ;
+    HEADER_STYLE = "QHeaderView::section { background-color: lightblue; font-weight: bold; }"
+    STYLES = {
+        "header": """
+            QHeaderView::section {
+                background-color: #D7D7D7;
+                color: #333333;
+                font-family: Roboto;
+                font-weight: bold;
+                font-size: 12px;
+            }
+        """,
+        "go": """
+            font-family: 'Roboto'; font-size: 12px;
+            color: #333; background-color: #FFEBE1;
+            padding: 5px;
+        """,
+        "interpro": """
+            font-family: 'Roboto'; font-size: 12px;
+            color: #333; background-color: #CACCE4; 
+            padding: 5px;
+        """,
+        "tag": {
+            "blast": "background-color: #077187; color: white;",
+            "interpro": "background-color: #4F518C; color: white;",
+            "default": "background-color: #ED7D3A; color: white;"
         }
-    """
-    
-    HEADER_STYLE2 = """
-        background-color: #077187;  /* hits */
-            color: #333333;
-            font : Roboto;
-            font-weight: bold;
-            font-size: 12px ;
-    """    
-    TAG_STYLES = {
-        "blast": "background-color: #077187; color: white; font-weight: bold; border-radius: 5px; padding: 3px;",
-        "interpro": "background-color: #4F518C; color: white; font-weight: bold; border-radius: 5px; padding: 3px;",
-        "default": "background-color: #ED7D3A; color: white; font-weight: bold; border-radius: 5px; padding: 3px;"
+    }
+
+    COLUMN_CONFIG = {
+        "main": {
+            "Length": 50, "COG": 50, "Enzyme": 80,
+            "Classification": 80, "Protein ID": 130,
+            "Description": 250, "InterPro": 100,
+            "Preferred name": 100
+        },
+        "blast": {
+            "hit_id": 100, "percent_identity": 120
+        }
     }
 
     @staticmethod
-    def change_specific_header_color(table: QTableWidget, column_index: int, color: str):
-        """Change the color of a specific header column."""
-        header = table.horizontalHeader()
-        #header.setSectionResizeMode(column_index, QHeaderView.Stretch)
-        header.setStyleSheet(f"QHeaderView::section:nth-child({column_index + 1}) {{ background-color: {color}; }}")   
+    def _batch_process(iterable, batch_size=500):
+        """Générateur pour le traitement par lots"""
+        it = iter(iterable)
+        while True:
+            batch = list(itertools.islice(it, batch_size))
+            if not batch:
+                break
+            yield batch
 
     @staticmethod
-    def style_table_headers(table: QTableWidget,target_column: int):
-        """Apply styles to table headers."""
+    def create_table(table_type: str) -> QTableWidget:
+        """Crée un tableau selon le type spécifié"""
+        table = QTableWidget()
+        
+        if table_type == 'main':
+            headers = [
+                "Protein ID", "Description", "Length", "Results",
+                "PFAMs", "GO", "Classification",
+                "Preferred name", "COG", "Enzyme", "InterPro"
+            ]
+            table.setColumnCount(len(headers))
+            table.setHorizontalHeaderLabels(headers)
+            DataTableManager.style_table_headers(table)
+        
+        elif table_type == 'blast':
+            headers = [
+                "Hit id", "Definition", "Accession", "Identity", 
+                "Alignment length", "E-value", "Bit-score",
+                "QStart", "QEnd", "sStart", "sEnd", "Hsp bit score"
+            ]
+            table.setColumnCount(len(headers))
+            table.setHorizontalHeaderLabels(headers)
+            DataTableManager.style_AdditionalTable_headers(table)
+        
+        return table
+    @staticmethod
+    def _create_table_item(value, background=None):
+        """Création optimisée d'items de tableau"""
+        item = QTableWidgetItem(str(value))
+        if background:
+            item.setBackground(background)
+        return item
+
+    @staticmethod
+    def style_table_headers(table: QTableWidget, target_column: int = None):
+        """Style les en-têtes du tableau"""
         header = table.horizontalHeader()
-        header.setStyleSheet(DataTableManager.HEADER_STYLE)
+        header.setStyleSheet(DataTableManager.STYLES["header"])
         header.setSectionResizeMode(QHeaderView.Interactive)
-        table.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)
-        #custom_header = CustomHeader(Qt.Horizontal, table, target_column=target_column)
-        #table.setHorizontalHeader(custom_header)
-        #header.setSectionResizeMode(QHeaderView.ResizeToContents)  
-        header.setStretchLastSection(True)  # Expands the last column to fill available space
-        table.resizeRowsToContents()
-        #table.setHorizontalHeaderLabels(["GOs"])
-
-
-    @staticmethod
-    def style_AdditionalTable_headers(table: QTableWidget):
-        """Apply styles to table headers."""
-        header = table.horizontalHeader()
-        header.setStyleSheet(DataTableManager.HEADER_STYLE)
-        header.setSectionResizeMode(QHeaderView.Stretch)
-        table.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)    
-
-    @staticmethod
-    def style_IprscanTable_headers(table: QTableWidget):
-        """Apply styles to table headers."""
-        header = table.horizontalHeader()
-        header.setStyleSheet(DataTableManager.HEADER_STYLE)
-        header.setSectionResizeMode(QHeaderView.Stretch)
-        table.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)    
-
-    """
-    @staticmethod
-    def style_table_data(table: QTableWidget):
-            table.setStyleSheet(DataTableManager.TABLE_STYLE)
-    """
+        header.setStretchLastSection(True)
+        
+        if target_column is not None:
+            header.setSectionResizeMode(target_column, QHeaderView.Stretch)
 
     @staticmethod
     def create_tag_widget(tags):
-        """ styled tags """
-        tag_layout = QHBoxLayout()
-        tag_widget = QWidget()
+        """Crée un widget de tags stylisés"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(2, 2, 2, 2)
 
-        for tag_type, tag_value in tags:
-            label = QLabel(str(tag_value))
+        for tag_type, value in tags:
+            label = QLabel(str(value))
             label.setAlignment(Qt.AlignCenter)
             label.setFixedSize(35, 18)
-            label.setStyleSheet(DataTableManager.TAG_STYLES.get(tag_type, DataTableManager.TAG_STYLES["default"]))
+            style = DataTableManager.STYLES["tag"].get(tag_type, DataTableManager.STYLES["tag"]["default"])
+            label.setStyleSheet(f"{style} border-radius: 5px; padding: 3px;")
+            layout.addWidget(label)
 
-
-            # tooltip 
-            if tag_type == "blast":
-                label.setToolTip("Blast results (alignement avec les bases de données).")
-            elif tag_type == "interpro":
-                label.setToolTip("InterPro results (functional classification).")
-            else:
-                label.setToolTip("GO ontologie results.")
-
-            tag_layout.addWidget(label)
-
-        tag_widget.setLayout(tag_layout)
-        return tag_widget
+        return widget
 
     @staticmethod
     def create_icon_widget(tag):
-        """icon for classification """
-        icon_widget = QWidget()
-        icon_layout = QHBoxLayout()
-        icon_layout.setContentsMargins(0, 0, 0, 0)
-
-        icon_label = QLabel()
-        icon_label.setAlignment(Qt.AlignCenter)
-        icon_label.setPixmap(QPixmap(DataTableManager.ICON_PATHS[tag]).scaled(16, 16, Qt.KeepAspectRatio))
-
-        #tooltip
-        icon_label.setToolTip("Manual/Automatic Annotation.")
-
-        icon_layout.addWidget(icon_label)
-        icon_widget.setLayout(icon_layout)
-        return icon_widget
-    
-
+        """Crée un widget d'icône"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        pixmap = QPixmap(DataTableManager.ICON_PATHS[tag])
+        label = QLabel()
+        label.setPixmap(pixmap.scaled(16, 16, Qt.KeepAspectRatio))
+        layout.addWidget(label)
+        
+        return widget
 
     @staticmethod
-    def populate_table(table, parsed_results, go_definitions):
-        table.setRowCount(0)  # Clear existing rows
-        table.setColumnCount(1) # Just one column for now
-        table.setHorizontalHeaderLabels(["query_id"]) # Column header
+    def populate_table(table: QTableWidget, parsed_results: list, go_definitions: dict):
+        """Peuple le tableau principal de manière optimisée"""
+        try:
+            table.setUpdatesEnabled(False)
+            table.clearContents()
+            
+            # Préparation des données
+            processed_data = [
+                DataTableManager._process_main_row(row, go_definitions)
+                for row in parsed_results
+            ]
+            
+            # Configuration
+            table.setRowCount(len(processed_data))
+            table.setColumnCount(11)
+            
+            # Peuplement par lots
+            for batch in DataTableManager._batch_process(enumerate(processed_data)):
+                for row_idx, (data, widgets) in batch:
+                    # Colonnes standards
+                    for col_idx in [0, 1, 2, 4, 7, 8, 9]:
+                        table.setItem(row_idx, col_idx, DataTableManager._create_table_item(data[col_idx]))
+                    
+                    # Colonnes spéciales
+                    table.setCellWidget(row_idx, 3, widgets['tags'])
+                    table.setCellWidget(row_idx, 5, widgets['go'])
+                    table.setCellWidget(row_idx, 6, widgets['icon'])
+                    table.setCellWidget(row_idx, 10, widgets['interpro'])
 
-        for i, result in enumerate(parsed_results[:5]): # Show first 5
-            table.insertRow(i)
-            item = QTableWidgetItem(result.get("query_id", "")) # Handle missing key
-            table.setItem(i, 0, item)
+            # Configuration finale
+            DataTableManager._apply_table_config(table, 'main')
+
+        finally:
+            table.setUpdatesEnabled(True)
+
+    @staticmethod
+    def _process_main_row(row_data, go_definitions):
+        """Prépare les données pour une ligne du tableau principal"""
+        #eggnog = row_data.get("eggNOG_annotations", [{}])[0]
+
+        eggnog_annotations = row_data.get("eggNOG_annotations", [])
+        if eggnog_annotations:  # Si la liste n'est pas vide
+            eggnog = eggnog_annotations[0]
+        else:
+            eggnog = {}
+        interpro = row_data.get("InterproScan_annotation", [{}])
+
+        base_data = [
+            row_data.get("query_id", "N/A"),
+            eggnog.get("Description", "N/A"),
+            row_data.get("query_len", 0),
+            DataTableManager._prepare_tags(row_data),
+            eggnog.get("PFAMs", "N/A"),
+            None,
+            "classified" if len(eggnog.get("GOs", "").split(',')) > 10 else "unclassified",
+            eggnog.get("Preferred_name", "N/A"),
+            eggnog.get("COG_category", "N/A"),
+            f"EC:{eggnog.get('EC', 'N/A')}",
+            None
+        ]
+
+        widgets = {
+            'tags': DataTableManager.create_tag_widget(base_data[3]),
+            'go': DataTableManager._create_go_widget(eggnog.get("GOs", ""), go_definitions),
+            'icon': DataTableManager.create_icon_widget(base_data[6]),
+            'interpro': DataTableManager._create_interpro_widget(interpro)
+        }
+
+        return base_data, widgets
+
+    @staticmethod
+    def _create_go_widget(gos_str, go_definitions):
+        """Crée le widget GO avec mise en forme"""
+        gos = gos_str.split(',')[:7]
+        content = []
+        
+        for go_id in gos:
+            desc, go_type = go_definitions.get(go_id, ("No description", ""))
+            content.append(f"<p>{go_id} - <b>{go_type}</b> - {desc}</p>")
+        
+        if len(gos_str.split(',')) > 7:
+            content.append("<p>...</p>")
+
+        label = QLabel("".join(content))
+        label.setTextFormat(Qt.RichText)
+        label.setStyleSheet(DataTableManager.STYLES["go"])
+        return label
+
+    @staticmethod
+    def _create_interpro_widget(data):
+        """Crée le widget InterPro"""
+        annotations = [ip.get("interpro", "") for ip in data]
+        label = QLabel("\n".join(filter(None, annotations)))
+        label.setStyleSheet(DataTableManager.STYLES["interpro"])
+        return label
+
+    def _apply_table_config(table, table_type):
+        """Applique la configuration des colonnes"""
+        config = DataTableManager.COLUMN_CONFIG.get(table_type, {})
+
+        # 1. Create a mapping of column names to indices:
+        column_name_to_index = {}
+        for i in range(table.columnCount()):
+            header_item = table.horizontalHeaderItem(i)
+            if header_item is not None:  # Important check!
+                header_text = header_item.text()
+                column_name_to_index[header_text] = i
+            else:
+                print(f"No header item found at index {i}. Skipping this column.")
+                continue  # Skip to the next column if no header item
+
+        for col_name, width in config.items():  # Iterate through column NAMES
+            col_index = column_name_to_index.get(col_name)  # Get the INDEX
+            if col_index is not None:  # Check if the column exists
+                try:
+                    if isinstance(width, int):
+                        table.setColumnWidth(col_index, width)  # Use the INDEX
+                    else:
+                        try:
+                            width = float(width)
+                            table.setColumnWidth(col_index, int(width))  # Use the INDEX
+                        except ValueError:
+                            print(f"Invalid width '{width}' for column {col_name}. Setting to default (100).")
+                            table.setColumnWidth(col_index, 100)  # Use the INDEX
+                except (ValueError, TypeError):  # This should now be very rare
+                    print(f"Error processing width for column {col_name}. Setting to default (100).")
+                    table.setColumnWidth(col_index, 100)  # Use the INDEX
+            else:
+                print(f"Column '{col_name}' not found in the table. Skipping.")
+
+        table.resizeRowsToContents()
 
 
 
 
     @staticmethod
     def populate_additional_table(table: QTableWidget, parsed_results: list):
-        addTable_column_headers = [
-            "Hit id", "definition", "accession", "identity", "Alignment length", 
-            "E_value", "Bit_score", "QStart", "QEnd", "sStart", "sEnd", "Hsp bit score"
-        ]
-        table.setHorizontalHeaderLabels(addTable_column_headers)
-
-        total_hits = 0
-        for result in parsed_results:
-            if "blast_hits" in result:  # Check if "blast_hits" key exists
-                total_hits += len(result["blast_hits"])
-
-        table.setRowCount(total_hits)
-
-        row_idx = 0
-        for result in parsed_results:
-            if "blast_hits" in result:  # Check AGAIN before iterating over hits
-                for hit in result["blast_hits"]:
-                    query_start = hit.get("query_positions", {}).get("start")  # Handle missing keys
-                    query_end = hit.get("query_positions", {}).get("end")
-                    subject_start = hit.get("subject_positions", {}).get("start")
-                    subject_end = hit.get("subject_positions", {}).get("end")
-                    hit_accession = result.get("hit_accession", "N/A")
-                    chunked_value = hit_accession.split("[[taxon")[0].strip() if hit_accession != "N/A" else "N/A" # Handle split error
-                    hsp = hit.get("hsps", [])
-                    hsp_bitScore = hsp[0].get("bit_score", "N/A") if hsp else "N/A"
-
-                    percent_identity_str = hit.get("percent_identity")
-                    percent_identity = 0.0
-                    if percent_identity_str and str(percent_identity_str).replace(".", "", 1).isdigit():
-                        try:
-                            percent_identity = float(percent_identity_str)
-                        except ValueError:
-                            print(f"Warning: Invalid percent_identity string: {percent_identity_str}")
-
-                    alignment_length_str = hit.get("alignment_length")
-                    alignment_length = 1.0
-                    if alignment_length_str and alignment_length_str != "Unknown":
-                        try:
-                            alignment_length = float(alignment_length_str)
-                        except ValueError:
-                            print(f"Warning: Invalid alignment_length string: {alignment_length_str}")
-
-                    percent_identity_value = (percent_identity / (alignment_length if alignment_length > 0 else 1)) * 100
-
+        """Peuple le tableau des résultats BLAST"""
+        try:
+            table.setUpdatesEnabled(False)
+            all_hits = []
+            
+            # Collecte des hits
+            for result in parsed_results:
+                all_hits.extend(result.get("blast_hits", []))
+            
+            # Configuration
+            table.setRowCount(len(all_hits))
+            table.clearContents()
+            
+            # Peuplement optimisé
+            for batch in DataTableManager._batch_process(enumerate(all_hits)):
+                for row_idx, hit in batch:
+                    identity = DataTableManager._calculate_identity(hit)
+                    
+                    # Progress bar
+                    progress = QProgressBar()
+                    progress.setValue(int(identity))
+                    progress.setStyleSheet(
+                        f"QProgressBar::chunk {{background-color: {DataTableManager._get_identity_color(identity)};}}"
+                    )
+                    
+                    # Données
                     row_data = [
-                        hit.get("hit_id", "N/A"),  # Use get() and provide default
-                        "N/A",  # definition (not available in your current code)
-                        chunked_value,
-                        percent_identity_value,
-                        alignment_length,
+                        hit.get("hit_id", "N/A"),
+                        hit.get("hit_def", "N/A"),
+                        hit.get("accession", "N/A").split("[[taxon")[0].strip(),
+                        identity,
+                        hit.get("alignment_length", "N/A"),
                         hit.get("e_value", "N/A"),
                         hit.get("bit_score", "N/A"),
-                        query_start,
-                        query_end,
-                        subject_start,
-                        subject_end,
-                        hsp_bitScore
+                        hit.get("query_positions", {}).get("start", "N/A"),
+                        hit.get("query_positions", {}).get("end", "N/A"),
+                        hit.get("subject_positions", {}).get("start", "N/A"),
+                        hit.get("subject_positions", {}).get("end", "N/A"),
+                        hit.get("hsps", [{}])[0].get("bit_score", "N/A")
                     ]
-
-                for col_idx, value in enumerate(row_data):
-                    if col_idx == 3:  # colonne percent_identity avec barre de progression
-                        progress = QProgressBar()
-                        progress.setValue(int(value))
-                        progress.setAlignment(Qt.AlignCenter)
-                        if int(value) > 90:
-                            progress.setStyleSheet("QProgressBar::chunk {background-color: #8FE388;}")
-                        elif int(value) < 70:
-                            progress.setStyleSheet("QProgressBar::chunk {background-color: #E3AE88;}")
+                    
+                    # Peuplement
+                    for col_idx, value in enumerate(row_data):
+                        if col_idx == 3:
+                            table.setCellWidget(row_idx, col_idx, progress)
                         else:
-                            progress.setStyleSheet("QProgressBar::chunk {background-color: #88BCE3;}")
-                        table.setCellWidget(row_idx, col_idx, progress)
-                    elif col_idx == 0:
-                        item = QTableWidgetItem(str(value))
-                        item.setBackground(QBrush(QColor("#A8D8DE")))  # hits id avec un code couleur
-                        table.setItem(row_idx, col_idx, item)
-                    else:
-                        item = QTableWidgetItem(str(value))
-                        table.setItem(row_idx, col_idx, item)
+                            table.setItem(row_idx, col_idx, DataTableManager._create_table_item(value))
 
-                row_idx += 1
+            # Configuration finale
+            DataTableManager._apply_table_config(table, 'blast')
 
-
-        for col_idx, header in enumerate(addTable_column_headers):
-                    if header == "percent_identity":
-                        table.setColumnWidth(col_idx, 100)
-                    elif header == "hit_id":
-                        table.setColumnWidth(col_idx, 100)
-                    else:
-                        table.setColumnWidth(col_idx, 100)    
-                        
-
+        finally:
+            table.setUpdatesEnabled(True)
 
     @staticmethod
-    def populate_interproscan_table(table: QTableWidget, interproscan_results: list):
-        """Populates a table with InterProScan annotation results."""
-        table_column_headers = [
-            "domain_id", "code", "method", "Method ID", "Description", "status", "Ipr ID", 
-            "description", "Signature Type", "ac", "name", "desc"
-        ]
-        table.setColumnCount(len(table_column_headers))
-        table.setHorizontalHeaderLabels(table_column_headers)
-
-        total_rows = len(interproscan_results)
-        table.setRowCount(total_rows)
-
-
-        if not isinstance(interproscan_results, list) or not all(isinstance(result, dict) for result in interproscan_results):
-            raise ValueError("parsed_results should be a list of dictionaries.")
-
-     
-        for row_idx, result in enumerate(interproscan_results):
-
-            InterproScan_annotation = result.get("InterproScan_annotation", [])
-            domain = InterproScan_annotation[0].get("domain_id", "N/A") if InterproScan_annotation else "N/A"
-            code = InterproScan_annotation[0].get("code", "N/A") if InterproScan_annotation else "N/A"
-            methode = InterproScan_annotation[0].get("method", "N/A") if InterproScan_annotation else "N/A"
-            method_id = InterproScan_annotation[0].get("method_id", "N/A") if InterproScan_annotation else "N/A"
-            description = InterproScan_annotation[0].get("description", "N/A") if InterproScan_annotation else "N/A"
-            status = InterproScan_annotation[0].get("status", "N/A") if InterproScan_annotation else "N/A"
-            interpro = InterproScan_annotation[0].get("interpro", "N/A") if InterproScan_annotation else "N/A"
-            interpro_description = InterproScan_annotation[0].get("interpro_description", "N/A") if InterproScan_annotation else "N/A"
-            type = InterproScan_annotation[0].get("type", "N/A") if InterproScan_annotation else "N/A"
-            """TO-DO !!"""
-            signature = result.get("signature", {"ac": "N/A", "name": "N/A", "desc": "N/A"})
-            ac = signature.get("ac", "N/A")
-            name = signature.get("name", "N/A")
-            desc = signature.get("desc", "N/A")
-
-            row_data = [
-                domain,code,methode,method_id,description,status,interpro,interpro_description,type,ac,name,desc
-            ]
-
-            for col_idx, value in enumerate(row_data):
-                item = QTableWidgetItem(str(value))
-                table.setItem(row_idx, col_idx, item)
-
-        #columns width
-        for col_idx, header in enumerate(table_column_headers):
-            table.setColumnWidth(col_idx, 150)
+    def _calculate_identity(hit):
+        """Calcule le pourcentage d'identité"""
+        try:
+            identity = float(hit.get("percent_identity", 0))
+            length = float(hit.get("alignment_length", 1)) or 1
+            return (identity / length) * 100
+        except (TypeError, ValueError):
+            return 0.0
 
     @staticmethod
-    def populate_GO_table(table: QTableWidget, GO_results: list):
-        """Populates a QTableWidget with GO annotation results."""
-        
-        table_column_headers = [
-            "id", "name", "namespace", "Definition", "comment", 
-            "synonym", "is_a", "is_obsolete", "relationship", "xref"
-        ]
-        
-        table.setColumnCount(len(table_column_headers))
-        table.setHorizontalHeaderLabels(table_column_headers)
+    def _get_identity_color(value):
+        """Détermine la couleur de la progress bar"""
+        if value > 90:
+            return "#8FE388"
+        elif value < 70:
+            return "#E3AE88"
+        return "#88BCE3"
 
-        total_rows = len(GO_results)
-        table.setRowCount(total_rows)
+    @staticmethod
+    def populate_interproscan_table(table: QTableWidget, results: list):
+        """Peuple le tableau InterProScan"""
+        try:
+            table.setUpdatesEnabled(False)
+            table.clearContents()
+            
+            # Préparation des données
+            processed_data = []
+            for result in results:
+                interpro = result.get("InterproScan_annotation", [{}])[0]
+                signature = interpro.get("signature", {})
+                processed_data.append([
+                    interpro.get("domain_id", "N/A"),
+                    interpro.get("code", "N/A"),
+                    interpro.get("method", "N/A"),
+                    interpro.get("method_id", "N/A"),
+                    interpro.get("description", "N/A"),
+                    interpro.get("status", "N/A"),
+                    interpro.get("interpro", "N/A"),
+                    interpro.get("interpro_description", "N/A"),
+                    interpro.get("type", "N/A"),
+                    signature.get("ac", "N/A"),
+                    signature.get("name", "N/A"),
+                    signature.get("desc", "N/A")
+                ])
+            
+            # Peuplement
+            table.setRowCount(len(processed_data))
+            for batch in DataTableManager._batch_process(enumerate(processed_data)):
+                for row_idx, data in batch:
+                    for col_idx, value in enumerate(data):
+                        table.setItem(row_idx, col_idx, DataTableManager._create_table_item(value))
 
-        if not isinstance(GO_results, list) or not all(isinstance(result, dict) for result in GO_results):
-            raise ValueError("GO_results should be a list of dictionaries.")
-        
+            # Configuration
+            table.resizeColumnsToContents()
 
-        for row_idx, result in enumerate(GO_results):
-            for col_idx, header in enumerate(table_column_headers):
-                value = result.get(header, "")  # Récupérer la valeur ou ""
-                
-                # Convertir les listes en texte si nécessaire
-                if isinstance(value, list):
-                    value = "; ".join(value)  # Séparer les valeurs par "; "
+        finally:
+            table.setUpdatesEnabled(True)
 
-                item = QTableWidgetItem(str(value)) 
-        
-                if header == "id":
-                    item.setBackground(QColor("#FFEBE1"))  # go color code 
-                
-                table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+    @staticmethod
+    def populate_GO_table(table: QTableWidget, go_terms: list):
+        """Peuple le tableau des termes GO"""
+        try:
+            table.setUpdatesEnabled(False)
+            table.clearContents()
+            
+            # Préparation des données
+            processed_data = []
+            for term in go_terms:
+                processed_data.append([
+                    term.get("id", ""),
+                    term.get("name", ""),
+                    term.get("namespace", ""),
+                    term.get("def", ""),
+                    term.get("comment", ""),
+                    "; ".join(term.get("synonym", [])),
+                    "; ".join(term.get("is_a", [])),
+                    term.get("is_obsolete", ""),
+                    "; ".join(term.get("relationship", [])),
+                    "; ".join(term.get("xref", []))
+                ])
+            
+            # Peuplement
+            table.setRowCount(len(processed_data))
+            for batch in DataTableManager._batch_process(enumerate(processed_data)):
+                for row_idx, data in batch:
+                    for col_idx, value in enumerate(data):
+                        item = DataTableManager._create_table_item(value)
+                        if col_idx == 0:
+                            item.setBackground(QColor("#FFEBE1"))
+                        table.setItem(row_idx, col_idx, item)
 
-                
-                
-                   
+            # Configuration
+            table.resizeColumnsToContents()
+
+        finally:
+            table.setUpdatesEnabled(True)
+
+    @staticmethod
+    def _prepare_tags(row_data):
+        """Prépare les tags pour la colonne 'Results'"""
+        tags = []
+        if "blast_results" in row_data:
+            tags.append(("blast", "BLAST"))
+        if "interpro_results" in row_data:
+            tags.append(("interpro", "InterPro"))
+        if not tags:
+            tags.append(("default", "N/A"))
+        return tags
+
+    @staticmethod
+    def style_AdditionalTable_headers(table):
+        """Apply styles to table headers."""
+        header = table.horizontalHeader()
+        header.setStyleSheet(DataTableManager.HEADER_STYLE)
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        table.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)
+        header.setStretchLastSection(True)  # Expands the last column to fill available space
+        table.resizeRowsToContents()
