@@ -1,6 +1,6 @@
-from PySide6.QtWidgets import QMainWindow,QScrollArea, QTableWidget,QSplitter ,QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton, QWidget,QGraphicsDropShadowEffect, QMenuBar, QSpacerItem, QSizePolicy, QMessageBox, QDialog,QStatusBar, QTextEdit, QTabWidget, QComboBox   ,QTableWidgetItem,QProgressBar, QRadioButton
+from PySide6.QtWidgets import QMainWindow,QScrollArea, QTableWidget,QHeaderView,QSplitter,QTableView ,QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton, QWidget,QGraphicsDropShadowEffect, QMenuBar, QSpacerItem, QSizePolicy, QMessageBox, QDialog,QStatusBar, QTextEdit, QTabWidget, QComboBox   ,QTableWidgetItem,QProgressBar, QRadioButton
 from PySide6.QtGui import QAction, QIcon, QPainter, QColor, QFont
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer,QAbstractTableModel, QModelIndex,Signal, Slot
 from PySide6 import QtWidgets
 from PySide6.QtCharts import QChart, QChartView, QPieSeries
 from utils.table_manager import DataTableManager
@@ -13,7 +13,9 @@ import json
 import os
 
 
+
 class DynamicTableWindow(QMainWindow):
+    data_loaded = Signal()
 
     def __init__(self, parsed_results):
 
@@ -81,6 +83,53 @@ class DynamicTableWindow(QMainWindow):
         self.table.itemChanged.connect(self.update_row_count)
         self.table.cellClicked.connect(self.update_description)
         self.table.cellClicked.connect(self.on_cell_selected)
+
+
+    def create_main_table(self):
+            self.table = QTableView()
+            self.table_group_box = QGroupBox("")
+
+            self.model = VirtualTableModel(self.parsed_results, self.go_definitions)
+            self.table.setModel(self.model)
+
+            self.table.setObjectName("MainResultsTable")
+            header = self.table.horizontalHeader()
+            header.setStretchLastSection(True)
+            header.setSectionResizeMode(QHeaderView.Interactive)
+
+            self.table.setHorizontalScrollMode(QTableView.ScrollPerPixel)
+            self.table.setVerticalScrollMode(QTableView.ScrollPerPixel)
+
+            for col, width in DataTableManager.COLUMN_CONFIG["main"].items():
+                try:
+                    col_idx = VirtualTableModel.HEADERS.index(col)
+                    self.table.setColumnWidth(col_idx, width)
+                except ValueError:
+                    print(f"Column {col} not found in headers")
+
+            layout = QVBoxLayout()
+            layout.addWidget(self.table)
+            self.table_group_box.setLayout(layout)
+
+
+    def connect_signals(self):
+        if self.table.model():
+            self.table.selectionModel().selectionChanged.connect(self.on_selection_changed)
+        self.data_loaded.connect(self.on_data_loaded)
+
+    def on_selection_changed(self):
+        indexes = self.table.selectionModel().selectedIndexes()
+        if indexes:
+            row = indexes[0].row()
+            self.handle_row_selection(row)
+
+    def handle_row_selection(self, row):
+        page = row // VirtualTableModel.PAGE_SIZE
+        if page in self.model._loaded_data:
+            item_data = self.model._loaded_data[page][row % VirtualTableModel.PAGE_SIZE]
+            self.update_detail_tabs(item_data)        
+
+
 
 
     def generate_go_graph(self):
@@ -842,3 +891,57 @@ class DynamicTableWindow(QMainWindow):
             self.config = {}
 
         
+class VirtualTableModel(QAbstractTableModel):
+    HEADERS = ["Protein ID", "Description", "Length", "Results",
+               "PFAMs", "GO", "Classification",
+               "Preferred name", "COG", "Enzyme", "InterPro"]
+    PAGE_SIZE = 100
+
+    def __init__(self, data, go_definitions=None):
+        super().__init__()
+        self._data = data
+        self._loaded_data = {}
+        self._go_definitions = go_definitions or {}
+        self._table_manager = DataTableManager()
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self._data)
+
+    def columnCount(self, parent=QModelIndex()):
+        return len(self.HEADERS)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+
+        row = index.row()
+        col = index.column()
+
+        page = row // self.PAGE_SIZE
+        if page not in self._loaded_data:
+            self._load_page(page)
+
+        row_data = self._loaded_data[page][row % self.PAGE_SIZE]
+        
+        if role == Qt.DisplayRole:
+            return str(row_data['display'].get(self.HEADERS[col], ""))
+            
+        return None
+
+    def headerData(self, section, orientation, role):
+        if role == Qt.DisplayRole:
+            if orientation == Qt.Horizontal:
+                return self.HEADERS[section]
+            return str(section + 1)
+        return None
+
+    def _load_page(self, page):
+        start = page * self.PAGE_SIZE
+        end = min(start + self.PAGE_SIZE, len(self._data))
+        
+        page_data = []
+        for item in self._data[start:end]:
+            processed = DataTableManager._process_main_row(item, self._go_definitions)
+            page_data.append(processed)
+            
+        self._loaded_data[page] = page_data

@@ -125,6 +125,79 @@ class DataTableManager:
         return icon_widget
     
 
+    COLUMN_CONFIG = {
+        "main": {
+            "Protein ID": 150,
+            "Description": 300,
+            "Length": 100,
+            "Results": 150,
+            "PFAMs": 150,
+            "GO": 150,
+            "Classification": 150,
+            "Preferred name": 150,
+            "COG": 150,
+            "Enzyme": 150,
+            "InterPro": 150
+        }
+    }
+
+    @staticmethod
+    def _process_main_row(row_data, go_definitions):
+        eggnog_annotations = row_data.get("eggNOG_annotations", [])
+        eggnog = eggnog_annotations[0] if eggnog_annotations else {}
+        interpro = row_data.get("InterproScan_annotation", [{}])
+
+        display_data = {
+            "Protein ID": row_data.get("query_id", "N/A"),
+            "Description": eggnog.get("Description", "N/A"),
+            "Length": row_data.get("query_len", 0),
+            "Results": DataTableManager._prepare_tags(row_data),
+            "PFAMs": eggnog.get("PFAMs", "N/A"),
+            "GO": DataTableManager._process_go_terms(eggnog.get("GOs", ""), go_definitions),
+            "Classification": "classified" if len(eggnog.get("GOs", "").split(',')) > 10 else "unclassified",
+            "Preferred name": eggnog.get("Preferred_name", "N/A"),
+            "COG": eggnog.get("COG_category", "N/A"),
+            "Enzyme": f"EC:{eggnog.get('EC', 'N/A')}",
+            "InterPro": DataTableManager._process_interpro(interpro)
+        }
+
+        widget_data = {
+            "Results": {"type": "tags", "data": display_data["Results"]},
+            "GO": {"type": "go", "data": display_data["GO"]},
+            "Classification": {"type": "icon", "data": display_data["Classification"]},
+            "InterPro": {"type": "interpro", "data": display_data["InterPro"]}
+        }
+
+        return {"display": display_data, "widgets": widget_data}
+
+    @staticmethod
+    def _process_go_terms(gos_str, go_definitions):
+        return gos_str.split(',')[:7]
+
+    @staticmethod
+    def _process_interpro(interpro_data):
+        return [item.get("interpro_description", "") for item in interpro_data if "interpro_description" in item]
+
+    @staticmethod
+    def _prepare_tags(row_data):
+        tags = []
+        if row_data.get("blast_hits"):
+            tags.append(("blast", str(len(row_data["blast_hits"]))))
+        if row_data.get("InterproScan_annotation"):
+            tags.append(("interpro", str(len(row_data["InterproScan_annotation"]))))
+        return tags
+
+    @staticmethod
+    def create_widget(widget_type, data):
+        if widget_type == "tags":
+            return DataTableManager._create_tags_widget(data)
+        elif widget_type == "go":
+            return DataTableManager._create_go_widget(data)
+        elif widget_type == "icon":
+            return DataTableManager._create_icon_widget(data)
+        elif widget_type == "interpro":
+            return DataTableManager._create_interpro_widget(data)
+        return None
 
     @staticmethod
     def populate_table(table: QTableWidget, parsed_results: list, go_definitions: dict ):
