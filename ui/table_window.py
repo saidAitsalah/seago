@@ -22,6 +22,8 @@ class DynamicTableWindow(QMainWindow):
         self.setGeometry(100, 100, 1400, 850)
         self.setWindowIcon(QIcon('./assets/image.png'))
         self.parsed_results = parsed_results  
+        enzyme_file_path= "./ontologies/enzclass.txt"
+        self.enzyme_dict = DataTableManager.parse_enzyme_file(enzyme_file_path)
 
         self.load_config()
 
@@ -30,7 +32,9 @@ class DynamicTableWindow(QMainWindow):
         DataTableManager.style_table_headers(self.table,target_column=6)
         obo_file_path = self.config.get("obo_file_path", "./ontologies/go-basic.obo")
         go_definitions = obo.load_go_definitions(obo_file_path)
-        DataTableManager.populate_table(self.table, parsed_results,go_definitions)
+        print(self.enzyme_dict)
+
+        DataTableManager.populate_table(self.table, parsed_results,go_definitions,self.enzyme_dict)
         self.table.itemSelectionChanged.connect(self.on_protein_selection_changed)
 
         """Components"""

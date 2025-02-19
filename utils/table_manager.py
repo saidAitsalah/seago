@@ -127,15 +127,15 @@ class DataTableManager:
 
 
     @staticmethod
-    def populate_table(table: QTableWidget, parsed_results: list, go_definitions: dict ):
+    def populate_table(table: QTableWidget, parsed_results: list, go_definitions: dict, enzyme_dict: dict ):
         """Populate the table with data."""
         if not isinstance(parsed_results, list) or not all(isinstance(result, dict) for result in parsed_results):
             raise ValueError("parsed_results should be a list of dictionaries.")
 
         column_headers = [
-            "Protein ID", "Description","Length", "Results",
-            "PFAMs", "GO", "Classification",
-            "Preferred name", "COG", "Enzyme","InterPro"
+            "Protein ID","Preferred name", "Description","Classification","Length", "Results","InterPro",
+             "GO", 
+             "COG", "Enzyme","PFAMs"
         ]
         table.setColumnCount(len(column_headers))
         table.setHorizontalHeaderLabels(column_headers)
@@ -152,7 +152,8 @@ class DataTableManager:
             PFAMs = eggnog_annotations[0].get("PFAMs", "N/A") if eggnog_annotations else "N/A"
             preferred_name = eggnog_annotations[0].get("Preferred_name", "N/A") if eggnog_annotations else "N/A"
             cog_category = eggnog_annotations[0].get("COG_category", "N/A") if eggnog_annotations else "N/A"
-            ec_number = eggnog_annotations[0].get("EC", "N/A") if eggnog_annotations else "N/A"
+            ec_numbers = eggnog_annotations[0].get("EC", "N/A") if eggnog_annotations else "N/A"
+            ec_number = ".".join(ec_numbers.split(".")[:3]).replace(" ", "") 
             gos = eggnog_annotations[0].get("GOs", "").split(',') if eggnog_annotations else []
             Interpro = result.get("InterproScan_annotation", [])
             current_interpro_annotations = [
@@ -171,7 +172,7 @@ class DataTableManager:
             if len(go_terms_with_description) > 7:
                 go_terms_display.append("<p>...</p>")  # Adding "..." if exceeding > 7 terms
 
-            go_label = QLabel("".join(go_terms_display))  # Use HTML to join terms
+            go_label = QLabel("".join(go_terms_display))  #  HTML to join terms
             go_label.setWordWrap(True)
             table.setRowHeight(row_idx, 120)  # Adding height for all rows
             go_label.setStyleSheet("""
@@ -181,14 +182,18 @@ class DataTableManager:
                 background-color: #FFEBE1;
                 padding: 5px;
             """)
-            go_label.setTextFormat(Qt.RichText)  # Enable rich text format
+            go_label.setTextFormat(Qt.RichText)  #  rich text format
             go_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
 
+            # Enzyme description
+            enzyme_description = enzyme_dict.get(ec_number, "No description available")
+            enzyme_display = f"{ec_number} - {enzyme_description}"
 
+            print(ec_number)
 
             """InterPRO display"""
             IPR_label = QLabel("\n".join(current_interpro_annotations))  # Join terms with line breaks
-            IPR_label.setWordWrap(True)  # Enable word wrapping if needed
+            IPR_label.setWordWrap(True)  # Enable word wrapping 
 
             IPR_label.setStyleSheet("""
                 font-family: 'Roboto', sans-serif;
@@ -212,19 +217,18 @@ class DataTableManager:
 
             """Data List"""
             row_data = [
-                prot_id, eggnog_annotation, prot_length, tags,
-                 PFAMs, None, classification_tag,
-                preferred_name, cog_category,f"EC:{ec_number}",None
+                prot_id,preferred_name, eggnog_annotation, classification_tag, prot_length, tags,
+                None, None, cog_category,enzyme_display, PFAMs,
             ]
 
             for col_idx, value in enumerate(row_data):
-                if col_idx == 3:
+                if col_idx == 5:
                     table.setCellWidget(row_idx, col_idx, DataTableManager.create_tag_widget(value))
-                elif col_idx == 6:
+                elif col_idx == 3:
                     table.setCellWidget(row_idx, col_idx, DataTableManager.create_icon_widget(value))
-                elif col_idx == 5:
+                elif col_idx == 7:
                     table.setCellWidget(row_idx, col_idx, go_label)
-                elif col_idx == 10:
+                elif col_idx == 6:
                     table.setCellWidget(row_idx, col_idx, IPR_label)                    
                 else:
                     table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
@@ -244,7 +248,7 @@ class DataTableManager:
             elif header == "Description":  
                 table.setColumnWidth(col_idx, 250)      
             elif header == "GO ": 
-                table.setColumnWidth(col_idx, 300)     
+                table.setColumnWidth(col_idx, 400)     
             elif header == "InterPro":  
                 table.setColumnWidth(col_idx, 100)
             elif header == "Preferred name":  
@@ -427,5 +431,15 @@ class DataTableManager:
                 table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
 
                 
-                
-                   
+    def parse_enzyme_file(file_path):
+        enzyme_dict = {}
+        with open(file_path, 'r') as file:
+            for line in file:
+                line = line.strip()
+                if line and not line.startswith('-') and line[0].isdigit():
+                    parts = line.split()
+                    if len(parts) > 1:
+                        ec_number = parts[0].replace(" ", "")  # Remove spaces from EC number
+                        description = ' '.join(parts[1:])
+                        enzyme_dict[ec_number] = description
+        return enzyme_dict
