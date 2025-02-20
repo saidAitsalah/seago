@@ -24,11 +24,12 @@ SeaGo is an application for the annotation and visualization of genomic data. It
 
 You can install the necessary dependencies using `pip`:
 
-```sh
+```sh```
 pip install -r [requirement.txt](http://_vscodecontentref_/0)
+
 
 ### Usage
 To run the application, execute the main.py file:
 
-```python [main.py]
+```python [main.py]```
 
