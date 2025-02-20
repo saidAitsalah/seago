@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QMainWindow,QScrollArea, QTableWidget,QSplitter ,QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton, QWidget,QGraphicsDropShadowEffect, QMenuBar, QSpacerItem, QSizePolicy, QMessageBox, QDialog,QStatusBar, QTextEdit, QTabWidget, QComboBox   ,QTableWidgetItem,QProgressBar, QRadioButton
-from PySide6.QtGui import QAction, QIcon, QPainter, QColor, QFont
+from PySide6.QtGui import QAction, QIcon, QPainter, QColor, QFont,QPixmap
 from PySide6.QtCore import Qt, QTimer
 from PySide6 import QtWidgets
 from PySide6.QtCharts import QChart, QChartView, QPieSeries
@@ -18,9 +18,9 @@ class DynamicTableWindow(QMainWindow):
     def __init__(self, parsed_results):
 
         super().__init__()
-        self.setWindowTitle("seaGo")
-        self.setGeometry(100, 100, 1400, 850)
-        self.setWindowIcon(QIcon('./assets/image.png'))
+        self.setWindowTitle("SeaGo - Annotation and visualization of genomic data")
+        self.setGeometry(100, 100, 1400, 1000)
+        self.setWindowIcon(QIcon('./assets/seago_logo_rounded.png'))
         self.parsed_results = parsed_results  
         enzyme_file_path= "./ontologies/enzclass.txt"
         self.enzyme_dict = DataTableManager.parse_enzyme_file(enzyme_file_path)
@@ -211,10 +211,10 @@ class DynamicTableWindow(QMainWindow):
         self.tabs.addTab(self.create_Iprscan_tab(parsed_results), "Domains")
         self.tabs.addTab(self.create_details_tab(), "Details")
         self.tabs.addTab(self.create_GO_tab(), "GO")
-        self.tabs.addTab(self.create_graphs_tab(), "Donut")
-        self.tabs.addTab(self.create_chart_tab(), "Chart")
-        self.tabs.addTab(self.create_MetaD_tab(), "Metadata")
         self.generate_go_graph() # Temp
+        self.tabs.addTab(self.create_chart_tab(), "Chart")
+        self.tabs.addTab(self.create_graphs_tab(), "Chart2")
+        self.tabs.addTab(self.create_MetaD_tab(), "Metadata")
         self.tabs.setStyleSheet("""
             QTabBar::tab {
                 color: #333333;
@@ -518,43 +518,61 @@ class DynamicTableWindow(QMainWindow):
     
 
     def create_status_bar(self):
-            self.status_bar = QStatusBar()
-            self.setStatusBar(self.status_bar)
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
 
-            # Row count label
-            #self.row_count_label = QLabel(self.row_count_label)
-            self.status_bar.addPermanentWidget(self.row_count_label)
+        # Spacer item before the logo
+        spacer = QLabel(" ")
+        self.status_bar.addWidget(spacer)
 
-            # Clock
-            self.clock_label = QLabel()
-            self.status_bar.addPermanentWidget(self.clock_label)
-            self.update_time()  # Initial time update
-            self.timer = QTimer(self)
-            self.timer.timeout.connect(self.update_time)
-            self.timer.start(1000)
+        # Logo SeaGo
+        self.logo_label = QLabel()
+        pixmap = QPixmap("./assets/seago_logo_rounded.png")  
+        self.logo_label.setPixmap(pixmap.scaled(16, 16, Qt.KeepAspectRatio))
+        self.status_bar.addWidget(self.logo_label)
 
-            # Progress bar
-            self.progress_bar = QProgressBar()
-            self.progress_bar.setMaximumWidth(200)
-            self.progress_bar.setVisible(False)
-            self.status_bar.addPermanentWidget(self.progress_bar)
+        # Version
+        self.version_label = QLabel(" Version 1.0.0  |")
+        self.status_bar.addWidget(self.version_label)
 
-            # Status bar style
-            self.status_bar.setStyleSheet("""
-                QStatusBar {
-                    background-color: #0B4F6C;
-                    color: #FFFFFF;
-                    font-weight: bold;
-                    font-size: 12px;
-                    border-top: 2px solid #86BBD8;
-                }
-                QLabel {
-                    color: #93FF96;
-                    font-weight: bold;
-                    font-size: 12px;
-                }
-            """)
+        # Copyright
+        self.copyright_label = QLabel("© IFREMER 2024-2025 - Tous droits réservés")
+        self.status_bar.addWidget(self.copyright_label)
 
+        # Row count label
+        self.row_count_label = QLabel()
+        self.status_bar.addPermanentWidget(self.row_count_label)
+
+        # Clock
+        self.clock_label = QLabel()
+        self.status_bar.addPermanentWidget(self.clock_label)
+        self.update_time()  # Initial time update
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_time)
+        self.timer.start(1000)
+
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximumWidth(200)
+        self.progress_bar.setVisible(False)
+        self.status_bar.addPermanentWidget(self.progress_bar)
+
+        # Status bar style
+        self.status_bar.setStyleSheet("""
+            QStatusBar {
+                background-color: #0B4F6C;
+                color: #FFFFFF;
+                font-weight: bold;
+                font-size: 12px;
+                border-top: 2px solid #86BBD8;
+            }
+            QLabel {
+                color: white;
+                font-weight: bold;
+                font-size: 12px;
+            }
+        """)
+#93FF96
 
     """************************************** Dialogs  *********************************************"""
     

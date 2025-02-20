@@ -15,7 +15,8 @@ if __name__ == "__main__":
     if file_path:
         start_time = timeit.default_timer()
         parsed_results = load_parsed_blast_hits(file_path)  
-        window = DynamicTableWindow(parsed_results)          
+        window = DynamicTableWindow(parsed_results)        
+        window.resize(1400, 1000)
         window.show()
         end_time = timeit.default_timer()
         print(f"Temps de chargement : {end_time - start_time:.6f} secondes")
