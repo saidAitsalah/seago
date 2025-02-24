@@ -1,6 +1,6 @@
-from PySide6.QtWidgets import QMainWindow,QScrollArea, QTableWidget,QSplitter ,QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton, QWidget,QGraphicsDropShadowEffect, QMenuBar, QSpacerItem, QSizePolicy, QMessageBox, QDialog,QStatusBar, QTextEdit, QTabWidget, QComboBox   ,QTableWidgetItem,QProgressBar, QRadioButton
-from PySide6.QtGui import QAction, QIcon, QPainter, QColor, QFont,QPixmap
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QMainWindow, QHeaderView, QTableView, QScrollArea, QTableWidget, QSplitter, QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton, QWidget, QGraphicsDropShadowEffect, QMenuBar, QSpacerItem, QSizePolicy, QMessageBox, QDialog, QStatusBar, QTextEdit, QTabWidget, QComboBox, QTableWidgetItem, QProgressBar, QRadioButton
+from PySide6.QtGui import QAction, QIcon, QPainter, QColor, QFont, QPixmap
+from PySide6.QtCore import Qt, QTimer, QAbstractTableModel, Signal, QModelIndex, QThread
 from PySide6 import QtWidgets
 from PySide6.QtCharts import QChart, QChartView, QPieSeries
 from utils.table_manager import DataTableManager
@@ -11,199 +11,243 @@ from pyvis.network import Network
 from utils.OBO_handler import obo
 import json
 import os
+import logging
+from model.data_model import VirtualTableModel
 
+class DataLoaderThread(QThread):
+    data_loaded = Signal(list)
+
+    def __init__(self, parsed_results, go_definitions):
+        super().__init__()
+        self.parsed_results = parsed_results
+        self.go_definitions = go_definitions
+
+    def run(self):
+        processed_data = DataTableManager.process_batch(self.parsed_results, self.go_definitions)
+        self.data_loaded.emit(processed_data)
 
 class DynamicTableWindow(QMainWindow):
+    data_loaded = Signal()
 
-    def __init__(self, parsed_results):
-
+    def __init__(self, parsed_results, file_path, config=None):
         super().__init__()
-        self.setWindowTitle("SeaGo - Annotation and visualization of genomic data")
-        self.setGeometry(100, 100, 1400, 1000)
-        self.setWindowIcon(QIcon('./assets/seago_logo_rounded.png'))
-        self.parsed_results = parsed_results  
-        enzyme_file_path= "./ontologies/enzclass.txt"
-        self.enzyme_dict = DataTableManager.parse_enzyme_file(enzyme_file_path)
+        self.file_path = file_path
+        self.parsed_results = parsed_results
+        self.config = config if config is not None else {}
+        self.go_definitions = {}
+        self.detail_tabs = {}
 
         self.load_config()
+        self.init_ui()
 
-        """main Table"""
-        self.table = QTableWidget()
-        DataTableManager.style_table_headers(self.table,target_column=6)
+        self.file_loader_thread = DataLoaderThread(self.parsed_results, self.go_definitions)
+        self.file_loader_thread.data_loaded.connect(self.on_data_loaded)
+        self.file_loader_thread.start()
+
+    def load_config(self):
+        """Load configuration and GO definitions"""
         obo_file_path = self.config.get("obo_file_path", "./ontologies/go-basic.obo")
-        go_definitions = obo.load_go_definitions(obo_file_path)
-        print(self.enzyme_dict)
+        self.go_definitions = obo.load_go_definitions(obo_file_path)
 
-        DataTableManager.populate_table(self.table, parsed_results,go_definitions,self.enzyme_dict)
-        self.table.itemSelectionChanged.connect(self.on_protein_selection_changed)
-
-        """Components"""
+    def init_ui(self):
+        """Initialize main UI components"""
+        self.setWindowTitle(f"Results - {self.file_path}")
+        self.create_main_table()
         self.create_menu_bar()
         self.create_filter_bar()
-        self.row_count_label = QLabel()
+        self.create_tab_system()
+        self.create_status_bar()
+        self.connect_signals()
+
+    def create_main_table(self):
+        """Create and configure main table with virtual model"""
+        self.table = QTableView()
+        self.table_group_box = QGroupBox("")
+        header = self.table.horizontalHeader()
+
+        # Set up virtual model
+        self.model = VirtualTableModel(self.parsed_results, header, self.go_definitions)
+        self.table.setModel(self.model)
+
+        # Configure table
+        self.table.setObjectName("MainResultsTable")
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(QHeaderView.Interactive)
+
+        # Optimize scrolling
+        self.table.setHorizontalScrollMode(QTableView.ScrollPerPixel)
+        self.table.setVerticalScrollMode(QTableView.ScrollPerPixel)
+
+        # Set column widths
+        for col, width in DataTableManager.COLUMN_CONFIG["main"].items():
+            try:
+                col_idx = VirtualTableModel.HEADERS.index(col)
+                self.table.setColumnWidth(col_idx, width)
+            except ValueError:
+                print(f"Column {col} not found in headers")
+                logging.error(f"Column {col} not found in headers")
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.table)
+        self.table_group_box.setLayout(layout)
+
+        # Populate the table
+        DataTableManager.populate_table(self.table, self.parsed_results, self.go_definitions)
+
+    def create_filter_bar(self):
+        self.filter_bar = QWidget()
+        layout = QHBoxLayout()
+        self.filter_input = QLineEdit()
+        self.filter_input.setPlaceholderText("Filter results...")
+        self.filter_type = QComboBox()
+        self.filter_type.addItems(["Protein ID", "Description", "GO Terms"])
+        layout.addWidget(QLabel("Filter by:"))
+        layout.addWidget(self.filter_type)
+        layout.addWidget(self.filter_input)
+        layout.addWidget(QPushButton("Apply", clicked=self.apply_filters))
+        self.filter_bar.setLayout(layout)
+        self.table_group_box.layout().insertWidget(0, self.filter_bar)
+
+
+    def connect_signals(self):
+        if self.table.model():
+            self.table.selectionModel().selectionChanged.connect(self.on_selection_changed)
+        self.data_loaded.connect(self.on_data_loaded)
+
+    def on_selection_changed(self):
+        indexes = self.table.selectionModel().selectedIndexes()
+        if indexes:
+            row = indexes[0].row()
+            self.handle_row_selection(row)
+
+    def handle_row_selection(self, row):
+        page = row // VirtualTableModel.PAGE_SIZE
+        if page in self.model._loaded_data:
+            item_data = self.model._loaded_data[page][row % VirtualTableModel.PAGE_SIZE]
+            self.update_detail_tabs(item_data)
+
+    def update_detail_tabs(self, item_data):
+        pass
+        """         if 'blast_hits' in item_data['display']:
+                    self.update_blast_tab(item_data['display']['blast_hits'])
+                if 'InterPro' in item_data['display']:
+                    self.create_interpro_tab(item_data['display']['InterPro'])
+                if 'GO' in item_data['display']:
+                    self.update_go_tab(item_data['display']['GO']) """
+
+    def on_data_loaded(self, processed_data):
+        #self.model.update_data(processed_data)
+        self.progress_bar.hide()
+        self.status_bar.showMessage("Data loaded successfully")
         self.update_row_count()
 
-        # Group box to encapsulate the table
-        table_group_box = QGroupBox("")
-        table_group_box_layout = QVBoxLayout()
-        table_group_box_layout.addLayout(self.filter_layout)
-        table_group_box_layout.addWidget(self.table)
-        table_group_box.setLayout(table_group_box_layout)
-        table_group_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+    """     def update_row_count(self):
+            row_count = self.model.rowCount()
+            self.status_bar.showMessage(f"Total rows: {row_count}") """
 
-        #Tabs creation
+    def handle_error(self, error_msg):
+        QMessageBox.critical(self, "Error", error_msg)
+        self.progress_bar.hide()
+
+    def closeEvent(self, event):
+        if hasattr(self, 'file_loader_thread'):
+            self.file_loader_thread.quit()
+            self.file_loader_thread.wait()
+        event.accept()
+
+    def create_tab_system(self):
         self.tabs = QTabWidget()
-        self.create_tabs(parsed_results)
-        
-
-        #QSplitter
-        splitter = QSplitter()
-        splitter.setOrientation(Qt.Vertical)  # verticale Orientation 
-        splitter.addWidget(table_group_box)  
-        splitter.addWidget(self.tabs)  
-        # initial sizes
-        splitter.setSizes([600, 250]) 
-
-        # main layout
+        splitter = QSplitter(Qt.Vertical)
+        splitter.addWidget(self.table_group_box)
+        splitter.addWidget(self.tabs)
+        splitter.setSizes([600, 250])
+        main_widget = QWidget()
         main_layout = QVBoxLayout()
         main_layout.addWidget(splitter)
-        container = QWidget()
-        container.setLayout(main_layout)
-        self.setCentralWidget(container)
+        main_widget.setLayout(main_layout)
+        self.setCentralWidget(main_widget)
 
-        # Filters
-        self.dynamic_filters = []
-        self.filter_fields = []
-        self.filter_logic_dropdown = QComboBox()  
-        self.filter_logic_dropdown.addItem('AND')
-        self.filter_logic_dropdown.addItem('OR')
-
-        # status Bar
-        self.create_status_bar()
-
-        # Connect signals
-        self.table.itemChanged.connect(self.update_row_count)
-        self.table.cellClicked.connect(self.update_description)
-        self.table.cellClicked.connect(self.on_cell_selected)
+    def apply_filters(self):
+        column = self.filter_type.currentIndex()
+        text = self.filter_input.text().lower()
+        DataTableManager.apply_filter(self.table, column, text)
 
 
-    def generate_go_graph(self):
-        """Generate Pyvis graph in QWebEngine widget dynamically from GO list."""
-        file_path = "go_graph.html"  # Temp file
-        
-        # Liste of go terms to test
+    def wrap_table_in_tab(self, table):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(table)
+        tab = QWidget()
+        layout = QVBoxLayout()
+        layout.addWidget(scroll)
+        tab.setLayout(layout)
+        return tab
+
+    def create_donut_chart(self, data):
+        donut = Widget()
+        donut.setMinimumSize(600, 400)
+        return donut
+
+    def create_go_graph(self, data):
+        file_path = "go_graph.html"
         go_terms = "GO:0000981,GO:0003674,GO:0003700,GO:0006355,GO:0006357,GO:0008150,GO:0009889,GO:0010468,GO:0010556,GO:0019219,GO:0019222,GO:0031323,GO:0031326,GO:0050789,GO:0050794,GO:0051171,GO:0051252,GO:0060255,GO:0065007,GO:0080090,GO:0140110,GO:1903506,GO:2000112,GO:2001141"
         go_list = go_terms.split(",")
 
-        #graphe Pyvis
-        net = Network(height="750px", width="100%", directed=True)
+        try:
+            net = Network(height="750px", width="100%", directed=True)
+            for go in go_list:
+                net.add_node(go, label=go)
+            for i in range(len(go_list) - 1):
+                net.add_edge(go_list[i], go_list[i + 1])
+            net.write_html(file_path)
 
-        # nodes
-        for go in go_list:
-            net.add_node(go, label=go)
+            if not os.path.exists(file_path):
+                print("Error: The HTML file was not created successfully.")
+                return None
 
-        # simple edges
-        for i in range(len(go_list) - 1):
-            net.add_edge(go_list[i], go_list[i + 1])
+            with open(file_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
 
-        # HTML generation
-        net.write_html(file_path)
+            if not html_content:
+                print("Error: HTML content is empty.")
+                return None
 
-        # read
-        with open(file_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
+            web_view = QWebEngineView()
+            web_view.setHtml(html_content)
 
-        # display QWebEngineView
-        web_view = QWebEngineView()
-        web_view.setHtml(html_content)
+            graph_tab = QWidget()
+            layout = QVBoxLayout()
+            layout.addWidget(web_view)
+            graph_tab.setLayout(layout)
+            self.tabs.addTab(graph_tab, "GO Graph")
+            return graph_tab
 
-        graph_tab = QWidget()
-        layout = QVBoxLayout()
-        layout.addWidget(web_view)
-        graph_tab.setLayout(layout)
+        except Exception as e:
+            print(f"Error generating or displaying the GO graph: {e}")
+            return None
 
-        self.tabs.addTab(graph_tab, "GO Graph")
-
-    def on_protein_selection_changed(self):
+    def on_protein_selection_changed(self, selected, deselected):
         """Updates the hits table based on the selected protein."""
-        selected_items = self.table.selectedItems()
-        if not selected_items:
+        selected_indexes = self.table.selectionModel().selectedIndexes()
+        if not selected_indexes:
             return  
 
-        selected_row = selected_items[0].row()
+        selected_row = selected_indexes[0].row()
 
         selected_protein = self.parsed_results[selected_row]  
-        print(f"Selected protein: {selected_protein}") 
+        logging.debug(f"Selected protein: {selected_protein}") 
 
         blast_hits = selected_protein.get("blast_hits", [])
         
-        self.update_hits_table(blast_hits)
+        #todoo
+        # self.update_hits_table(blast_hits)
 
 
-    def update_hits_table(self, blast_hits):
-        # Define column headers as in the 'populate_additional_table' function
-        hits_table_column_headers = [
-            "Hit id", "Definition", "Accession", "Identity", "Alignment length", "E-value", "Bit-score",
-            "QStart", "QEnd", "sStart", "sEnd", "Hsp bit score"
-        ]
-        
-        self.additional_table.setHorizontalHeaderLabels(hits_table_column_headers)
-        
-        total_hits = len(blast_hits)
-        self.additional_table.setRowCount(total_hits)
-
-        # Populate the table row by row
-        for row_idx, hit in enumerate(blast_hits):
-            query_start = hit.get("query_positions", {}).get("start", "N/A")
-            query_end = hit.get("query_positions", {}).get("end", "N/A")
-            subject_start = hit.get("subject_positions", {}).get("start", "N/A")
-            subject_end = hit.get("subject_positions", {}).get("end", "N/A")
-            hit_accession = hit.get("accession", "N/A")
-            hsp_bit_score = hit.get("hsps", [{}])[0].get("bit_score", "N/A")
-            identity = (float(hit.get("percent_identity", 0)) / float(hit.get("alignment_length", 1))) * 100
-
-            # row data
-            row_data = [
-                hit["hit_id"],  # hit_id
-              #  hit["hit_def"],  # hit_def
-                hit_accession,  # accession
-                identity,  # identity
-                hit["alignment_length"],  # alignment_length
-                hit["e_value"],  # e_value
-                hit["bit_score"],  # bit_score
-                query_start,  # Query Start
-                query_end,  # Query End
-                subject_start,  # Subject Start
-                subject_end,  # Subject End
-                hsp_bit_score  # Hsp bit score
-            ]
-
-            for col_idx, value in enumerate(row_data):
-                if col_idx == 3:  # Identity column with progress bar
-                    progress = QProgressBar()
-                    progress.setValue(int(value))
-                    progress.setAlignment(Qt.AlignCenter)
-                    if int(value) > 90:
-                        progress.setStyleSheet("QProgressBar::chunk {background-color: #8FE388;}")
-                    elif int(value) < 70:
-                        progress.setStyleSheet("QProgressBar::chunk {background-color: #E3AE88;}")
-                    else:
-                        progress.setStyleSheet("QProgressBar::chunk {background-color: #88BCE3;}")
-                    self.additional_table.setCellWidget(row_idx, col_idx, progress)
-                else:
-                    item = QTableWidgetItem(str(value))
-                    self.additional_table.setItem(row_idx, col_idx, item)
-
-        # column widths
-        for col_idx, header in enumerate(hits_table_column_headers):
-            if header == "Identity":
-                self.additional_table.setColumnWidth(col_idx, 120)
-            elif header == "hit_id":
-                self.additional_table.setColumnWidth(col_idx, 100)
-            else:
-                self.additional_table.setColumnWidth(col_idx, 120)
-
-
+    """     def update_hits_table(self, blast_hits):
+            headers = ["Hit id", "Definition", "Accession", "Identity", "Alignment length", "E-value", "Bit-score", "QStart", "QEnd", "sStart", "sEnd", "Hsp bit score"]
+            data = [[hit.get(header, "") for header in headers] for hit in blast_hits]
+            self.additional_model = CustomTableModel(data, headers)
+            self.additional_table.setModel(self.additional_model) """
 
     def create_tabs(self, parsed_results):
         """tabs for hits, graphs, metadata .."""
@@ -223,30 +267,32 @@ class DynamicTableWindow(QMainWindow):
                 font-size: 12px ;
             }
         """)
+        logging.debug("Tabs created")
+
 
 
     def create_details_tab(self):
-            self.description_widget = QTextEdit()
-            self.description_widget.setReadOnly(True)
-            self.description_widget.setPlaceholderText("Select a cell to view annotation details...")
-            tab_details = QWidget()
-            tab_details_layout = QVBoxLayout()
-            tab_details_layout.addWidget(self.description_widget)
-            tab_details.setLayout(tab_details_layout)
-            return tab_details
+        self.description_widget = QTextEdit()
+        self.description_widget.setReadOnly(True)
+        self.description_widget.setPlaceholderText("Select a cell to view annotation details...")
+        tab_details = QWidget()
+        tab_details_layout = QVBoxLayout()
+        tab_details_layout.addWidget(self.description_widget)
+        tab_details.setLayout(tab_details_layout)
+        return tab_details
             
 
 
 
     def create_MetaD_tab(self):
-            description_widget = QLabel("Metadata will be displayed here...")
-            description_widget.setAlignment(Qt.AlignCenter)
-            tab_graphs = QWidget()
-            tab_graphs_layout = QVBoxLayout()
-            tab_graphs_layout.addWidget(description_widget)
-            tab_graphs.setLayout(tab_graphs_layout)
-            self.tabs.addTab(tab_graphs, "Graphs")
-            return tab_graphs
+        description_widget = QLabel("Metadata will be displayed here...")
+        description_widget.setAlignment(Qt.AlignCenter)
+        tab_graphs = QWidget()
+        tab_graphs_layout = QVBoxLayout()
+        tab_graphs_layout.addWidget(description_widget)
+        tab_graphs.setLayout(tab_graphs_layout)
+        self.tabs.addTab(tab_graphs, "Graphs")
+        return tab_graphs
     
 
     def create_graphs_tab(self):
@@ -322,57 +368,57 @@ class DynamicTableWindow(QMainWindow):
 
 
     def create_tables_tab(self, parsed_results):
-            """hits table"""
-            self.additional_table = QTableWidget()
-            DataTableManager.style_AdditionalTable_headers(self.additional_table)
-            self.additional_table.setColumnCount(12)
-            DataTableManager.populate_additional_table(self.additional_table, parsed_results)
+        """hits table"""
+        self.additional_table = QTableWidget()
+        DataTableManager.style_AdditionalTable_headers(self.additional_table)
+        self.additional_table.setColumnCount(12)
+        DataTableManager.populate_additional_table(self.additional_table, parsed_results)
 
-            tab_tables = QWidget()
-            tab_tables_layout = QVBoxLayout()
-            tab_tables_layout.addWidget(self.additional_table)
-            tab_tables.setLayout(tab_tables_layout)
+        tab_tables = QWidget()
+        tab_tables_layout = QVBoxLayout()
+        tab_tables_layout.addWidget(self.additional_table)
+        tab_tables.setLayout(tab_tables_layout)
 
 
-            tab_tables.setStyleSheet("""
-                QTabBar::tab {
-                    background: #077187;       /* Couleur de l'onglet par défaut */
-                    color: black;                /* Couleur du texte */
-                    padding: 5px;                /* Marges intérieures */
-                }
-                QTabBar::tab:hover {
-                    background: lightgreen;      /* Couleur au survol */
-                }
-            """)
-            return tab_tables
+        tab_tables.setStyleSheet("""
+            QTabBar::tab {
+                background: #077187;       /* Couleur de l'onglet par défaut */
+                color: black;                /* Couleur du texte */
+                padding: 5px;                /* Marges intérieures */
+            }
+            QTabBar::tab:hover {
+                background: lightgreen;      /* Couleur au survol */
+            }
+        """)
+        return tab_tables
 
     def create_Iprscan_tab(self, parsed_results):
-            """IPRscan Table tab'"""
-            self.Iprsca_table = QTableWidget()
-            DataTableManager.style_IprscanTable_headers(self.Iprsca_table)
-            self.Iprsca_table.setColumnCount(12)
-            DataTableManager.populate_interproscan_table(self.Iprsca_table, parsed_results)
+        """IPRscan Table tab'"""
+        self.Iprsca_table = QTableWidget()
+        DataTableManager.style_IprscanTable_headers(self.Iprsca_table)
+        self.Iprsca_table.setColumnCount(12)
+        DataTableManager.populate_interproscan_table(self.Iprsca_table, parsed_results)
 
-            tab_Iprscan = QWidget()
-            tab_Iprscan_layout = QVBoxLayout()
-            tab_Iprscan_layout.addWidget(self.Iprsca_table)
-            tab_Iprscan.setLayout(tab_Iprscan_layout)
-            return tab_Iprscan
+        tab_Iprscan = QWidget()
+        tab_Iprscan_layout = QVBoxLayout()
+        tab_Iprscan_layout.addWidget(self.Iprsca_table)
+        tab_Iprscan.setLayout(tab_Iprscan_layout)
+        return tab_Iprscan
                 
     def create_GO_tab(self):
-            obo_file_path = "./ontologies/go-basic.obo"  #TO-DO obo file should be moved to config.Json !!
+        obo_file_path = "./ontologies/go-basic.obo"  #TO-DO obo file should be moved to config.Json !!
 
-            go_data = obo.load_go_terms(obo_file_path)
-            self.GO_table = QTableWidget()
-            DataTableManager.style_IprscanTable_headers(self.GO_table)
-            self.GO_table.setColumnCount(9)
-            DataTableManager.populate_GO_table(self.GO_table, go_data)
+        go_data = obo.load_go_terms(obo_file_path)
+        self.GO_table = QTableWidget()
+        DataTableManager.style_IprscanTable_headers(self.GO_table)
+        self.GO_table.setColumnCount(9)
+        DataTableManager.populate_GO_table(self.GO_table, go_data)
 
-            tab_go = QWidget()
-            tab_go_layout = QVBoxLayout()
-            tab_go_layout.addWidget(self.GO_table)
-            tab_go.setLayout(tab_go_layout)
-            return tab_go
+        tab_go = QWidget()
+        tab_go_layout = QVBoxLayout()
+        tab_go_layout.addWidget(self.GO_table)
+        tab_go.setLayout(tab_go_layout)
+        return tab_go
                 
 
     def update_description(self, row, column):
@@ -384,8 +430,6 @@ class DynamicTableWindow(QMainWindow):
         else:
             self.description_widget.clear()  
 
-
-   
 
     """****************************************** Bar components *********************************************"""
 
@@ -846,21 +890,13 @@ class DynamicTableWindow(QMainWindow):
 
     #to-review            
     def update_row_count(self):
-        """Update the row count label to display the number of visible rows."""
-        visible_rows = sum(not self.table.isRowHidden(row) for row in range(self.table.rowCount()))
-        self.row_count_label.setText(f"Rows displayed: {visible_rows}")
+            """Update the row count label to display the number of visible rows."""
+            model = self.table.model()
+            if model:
+                visible_rows = sum(not self.table.isRowHidden(row) for row in range(model.rowCount()))
+                self.row_count_label.setText(f"Rows displayed: {visible_rows}")
 
 
     """***************************** utils  *********************************************"""   
     
-    def load_config(self):
-        """Charger la configuration depuis le fichier JSON"""
-        config_file = "./config.json"
-        if os.path.exists(config_file):
-            with open(config_file, "r") as f:
-                self.config = json.load(f)
-        else:
-            print(f"Le fichier de configuration {config_file} est introuvable.")
-            self.config = {}
 
-        
