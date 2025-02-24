@@ -14,6 +14,10 @@ from PySide6.QtWidgets import (QMainWindow, QFileDialog, QMessageBox,
 from ui.table_window import DynamicTableWindow
 from utils.table_manager import DataTableManager
 import timeit
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class AppSignals(QObject):
     progress_updated = Signal(int, str)
@@ -184,11 +188,17 @@ class AppController(QObject):
                 self.central_layout.removeWidget(self.results_widget)
                 self.results_widget.deleteLater()
                 self.results_widget = None
-                
+                    
             # Ensure we have valid data before creating the widget
             if parsed_results:
+                #logging.debug(f"Parsed results: {parsed_results}")
+
                 self.results_widget = DynamicTableWindow(parsed_results, file_path)
                 self.central_layout.addWidget(self.results_widget)
+                
+                # Appelez populate_table ici
+                DataTableManager.populate_table(self.results_widget.table, parsed_results, self.results_widget.go_definitions)
+                
                 end_time = time.time()
                 if self.start_time:
                     total_time = end_time - self.start_time
@@ -197,7 +207,7 @@ class AppController(QObject):
                     print("Start time not recorded.")
             else:
                 raise ValueError("No data available to display")
-                
+                    
         except Exception as e:
             print(f"Error in show_results: {str(e)}")
             traceback.print_exc()

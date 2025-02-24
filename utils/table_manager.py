@@ -1,10 +1,15 @@
 from PySide6.QtWidgets import (
-    QTableWidget, QTableWidgetItem, QHBoxLayout, QLabel, 
+    QTableWidget, QTableWidgetItem,QTableView, QHBoxLayout, QLabel, 
     QWidget, QHeaderView, QProgressBar
 )
 from PySide6.QtGui import QPixmap, QColor, QBrush
 from PySide6.QtCore import Qt
 import itertools
+from model.data_model import VirtualTableModel,WidgetDelegate
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 COLUMN_CONFIG = {
     "main": {
@@ -102,16 +107,28 @@ class DataTableManager:
     @staticmethod
     def _process_main_row(row_data, go_definitions):
         """Prepare data for a table row"""
+        logging.debug(f"Processing row data: {row_data}")
+
         eggnog_annotations = row_data.get("eggNOG_annotations", [])
         eggnog = eggnog_annotations[0] if eggnog_annotations else {}
         interpro = row_data.get("InterproScan_annotation", [{}])
+
+
+        # Extract tags directly from row_data
+        tags = []
+        if row_data.get("blast_hits"):
+            tags.append(("blast", str(len(row_data["blast_hits"]))))
+        if row_data.get("InterproScan_annotation"):
+            tags.append(("interpro", str(len(row_data["InterproScan_annotation"]))))
+        if not tags:
+            tags.append(("default", "N/A"))
 
         # Prepare display data
         display_data = {
             "Protein ID": row_data.get("query_id", "N/A"),
             "Description": eggnog.get("Description", "N/A"),
             "Length": row_data.get("query_len", 0),
-            "Results": DataTableManager._prepare_tags(row_data),
+            "Results": tags, #todo to not add tags directly
             "PFAMs": eggnog.get("PFAMs", "N/A"),
             "GO": DataTableManager._process_go_terms(eggnog.get("GOs", ""), go_definitions),
             "Classification": "classified" if len(eggnog.get("GOs", "").split(',')) > 10 else "unclassified",
@@ -121,6 +138,9 @@ class DataTableManager:
             "InterPro": DataTableManager._process_interpro(interpro)
         }
 
+        # Log display data
+        logging.debug(f"Display data: {display_data}")
+
         # Prepare widget data
         widget_data = {
             "Results": {"type": "tags", "data": display_data["Results"]},
@@ -128,6 +148,9 @@ class DataTableManager:
             "Classification": {"type": "icon", "data": display_data["Classification"]},
             "InterPro": {"type": "interpro", "data": display_data["InterPro"]}
         }
+
+        # Log widget data
+        logging.debug(f"Widget data: {widget_data}")
 
         return {"display": display_data, "widgets": widget_data}
 
@@ -144,18 +167,22 @@ class DataTableManager:
     @staticmethod
     def _prepare_tags(row_data):
         """Prepare tags for display"""
+        logging.debug(f"Preparing tags for row data: {row_data}")
         tags = []
         if row_data.get("blast_hits"):
             tags.append(("blast", str(len(row_data["blast_hits"]))))
         if row_data.get("InterproScan_annotation"):
             tags.append(("interpro", str(len(row_data["InterproScan_annotation"]))))
+        if not tags:
+            tags.append(("default", "N/A"))
+        logging.debug(f"Prepared tags: {tags}")
         return tags
 
     @staticmethod
     def create_widget(widget_type, data):
         """Create widget based on type and data"""
         if widget_type == "tags":
-            return DataTableManager._create_tags_widget(data)
+            return DataTableManager.create_tag_widget(data)
         elif widget_type == "go":
             return DataTableManager._create_go_widget(data)
         elif widget_type == "icon":
@@ -234,74 +261,63 @@ class DataTableManager:
         layout.addWidget(label)
         
         return widget
-
     @staticmethod
-    def populate_table(table: QTableWidget, parsed_results: list, go_definitions: dict):
-        """Peuple le tableau principal de manière optimisée"""
-        try:
-            table.setUpdatesEnabled(False)
-            table.clearContents()
-            
-            # Préparation des données
-            processed_data = [
-                DataTableManager._process_main_row(row, go_definitions)
-                for row in parsed_results
-            ]
-            
-            # Configuration
-            table.setRowCount(len(processed_data))
-            table.setColumnCount(11)
-            
-            # Peuplement par lots
-            for batch in DataTableManager._batch_process(enumerate(processed_data)):
-                for row_idx, (data, widgets) in batch:
-                    # Colonnes standards
-                    for col_idx in [0, 1, 2, 4, 7, 8, 9]:
-                        table.setItem(row_idx, col_idx, DataTableManager._create_table_item(data[col_idx]))
-                    
-                    # Colonnes spéciales
-                    table.setCellWidget(row_idx, 3, widgets['tags'])
-                    table.setCellWidget(row_idx, 5, widgets['go'])
-                    table.setCellWidget(row_idx, 6, widgets['icon'])
-                    table.setCellWidget(row_idx, 10, widgets['interpro'])
+    def populate_table(table: QTableView, parsed_results: list, go_definitions: dict):
+        """Populate the main table using QTableView and VirtualTableModel"""
+        processed_data = []
+        for batch in DataTableManager._batch_process(parsed_results):
+            for row in batch:
+                processed_data.append(DataTableManager._process_main_row(row, go_definitions))
+        
+        model = VirtualTableModel(processed_data, go_definitions)
+        table.setModel(model)
 
-            # Configuration finale
-            DataTableManager._apply_table_config(table, 'main')
+        # Configure the delegate to render widgets
+        delegate = WidgetDelegate(table)
+        table.setItemDelegate(delegate)    
+    """   @staticmethod
+        def populate_table(table: QTableView, parsed_results: list, go_definitions: dict):
+                processed_data = [
+                    DataTableManager._process_main_row(row, go_definitions)
+                    for row in parsed_results
+                ]
+                #logging.debug(f"Processed data: {processed_data}")
 
-        finally:
-            table.setUpdatesEnabled(True)
+                model = VirtualTableModel(processed_data, go_definitions)
+                table.setModel(model)"""
+       
+        
+    """  @staticmethod
+            def _process_main_row(row_data, go_definitions):
+                ~#Prepare data for a table row
+                eggnog_annotations = row_data.get("eggNOG_annotations", [])
+                eggnog = eggnog_annotations[0] if eggnog_annotations else {}
+                interpro = row_data.get("InterproScan_annotation", [{}])
 
-    @staticmethod
-    def _process_main_row(row_data, go_definitions):
-        """Prepare data for a table row"""
-        eggnog_annotations = row_data.get("eggNOG_annotations", [])
-        eggnog = eggnog_annotations[0] if eggnog_annotations else {}
-        interpro = row_data.get("InterproScan_annotation", [{}])
+                # Prepare display data
+                display_data = {
+                    "Protein ID": row_data.get("query_id", "N/A"),
+                    "Description": eggnog.get("Description", "N/A"),
+                    "Length": row_data.get("query_len", 0),
+                    "Results": DataTableManager._prepare_tags(row_data),
+                    "PFAMs": eggnog.get("PFAMs", "N/A"),
+                    "GO": DataTableManager._process_go_terms(eggnog.get("GOs", ""), go_definitions),
+                    "Classification": "classified" if len(eggnog.get("GOs", "").split(',')) > 10 else "unclassified",
+                    "Preferred name": eggnog.get("Preferred_name", "N/A"),
+                    "COG": eggnog.get("COG_category", "N/A"),
+                    "Enzyme": f"EC:{eggnog.get('EC', 'N/A')}",
+                    "InterPro": DataTableManager._process_interpro(interpro)
+                }
 
-        # Prepare display data
-        display_data = {
-            "Protein ID": row_data.get("query_id", "N/A"),
-            "Description": eggnog.get("Description", "N/A"),
-            "Length": row_data.get("query_len", 0),
-            "Results": DataTableManager._prepare_tags(row_data),
-            "PFAMs": eggnog.get("PFAMs", "N/A"),
-            "GO": DataTableManager._process_go_terms(eggnog.get("GOs", ""), go_definitions),
-            "Classification": "classified" if len(eggnog.get("GOs", "").split(',')) > 10 else "unclassified",
-            "Preferred name": eggnog.get("Preferred_name", "N/A"),
-            "COG": eggnog.get("COG_category", "N/A"),
-            "Enzyme": f"EC:{eggnog.get('EC', 'N/A')}",
-            "InterPro": DataTableManager._process_interpro(interpro)
-        }
+                # Prepare widget data
+                widget_data = {
+                    "Results": {"type": "tags", "data": display_data["Results"]},
+                    "GO": {"type": "go", "data": display_data["GO"]},
+                    "Classification": {"type": "icon", "data": display_data["Classification"]},
+                    "InterPro": {"type": "interpro", "data": display_data["InterPro"]}
+                }
 
-        # Prepare widget data
-        widget_data = {
-            "Results": {"type": "tags", "data": display_data["Results"]},
-            "GO": {"type": "go", "data": display_data["GO"]},
-            "Classification": {"type": "icon", "data": display_data["Classification"]},
-            "InterPro": {"type": "interpro", "data": display_data["InterPro"]}
-        }
-
-        return {"display": display_data, "widgets": widget_data}
+                return {"display": display_data, "widgets": widget_data} """
 
     @staticmethod
     def _process_go_terms(gos_str, go_definitions):
