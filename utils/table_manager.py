@@ -151,18 +151,6 @@ class DataTableManager:
             tags.append(("interpro", str(len(row_data["InterproScan_annotation"]))))
         return tags
 
-    @staticmethod
-    def create_widget(widget_type, data):
-        """Create widget based on type and data"""
-        if widget_type == "tags":
-            return DataTableManager._create_tags_widget(data)
-        elif widget_type == "go":
-            return DataTableManager._create_go_widget(data)
-        elif widget_type == "icon":
-            return DataTableManager._create_icon_widget(data)
-        elif widget_type == "interpro":
-            return DataTableManager._create_interpro_widget(data)
-        return None
 
     @staticmethod
     def create_table(table_type: str) -> QTableWidget:
@@ -253,7 +241,7 @@ class DataTableManager:
             table.setColumnCount(11)
             
             # Peuplement par lots
-            for batch in DataTableManager._batch_process(enumerate(processed_data)):
+            for batch in DataTableManager.process_batch(enumerate(processed_data)):
                 for row_idx, (data, widgets) in batch:
                     # Colonnes standards
                     for col_idx in [0, 1, 2, 4, 7, 8, 9]:

@@ -360,3 +360,5 @@ class VirtualTableModel(QAbstractTableModel):
             page_data.append(processed)
             
         self._loaded_data[page] = page_data
+
+        
