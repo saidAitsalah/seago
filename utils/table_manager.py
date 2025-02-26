@@ -265,7 +265,7 @@ class DataTableManager:
     def populate_table(table: QTableView, parsed_results: list, go_definitions: dict):
         """Populate the main table using QTableView and VirtualTableModel"""
         processed_data = []
-        for batch in DataTableManager._batch_process(parsed_results):
+        for batch in DataTableManager.process_batch(parsed_results):
             for row in batch:
                 processed_data.append(DataTableManager._process_main_row(row, go_definitions))
         
@@ -274,7 +274,16 @@ class DataTableManager:
 
         # Configure the delegate to render widgets
         delegate = WidgetDelegate(table)
-        table.setItemDelegate(delegate)    
+        table.setItemDelegate(delegate) 
+
+        # Add widgets to the table
+    # Add widgets to the table
+        for row in range(model.rowCount()):
+            for col in range(model.columnCount()):
+                index = model.index(row, col)
+                widget = model.data(index, Qt.DecorationRole)
+                if widget:
+                    model.widgets[(row, col)] = widget 
     """   @staticmethod
         def populate_table(table: QTableView, parsed_results: list, go_definitions: dict):
                 processed_data = [
