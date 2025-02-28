@@ -2,8 +2,8 @@ from PySide6.QtWidgets import (
     QMainWindow, QScrollArea, QApplication, QTableWidget, QSplitter,
     QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton,
     QWidget, QGraphicsDropShadowEffect, QMenuBar, QSpacerItem, QSizePolicy,
-    QMessageBox, QDialog, QStatusBar, QTextEdit, QTabWidget, QComboBox,
-    QTableWidgetItem, QProgressBar
+    QMessageBox, QDialog, QStatusBar, QTextEdit, QTabWidget, QComboBox,QHeaderView,QTableView,
+    QTableWidgetItem, QProgressBar,QSpinBox
 )
 from PySide6.QtGui import (
     QAction, QIcon, QPainter, QColor, QFont, QPixmap
@@ -18,23 +18,22 @@ import json
 import os
 import traceback
 from typing import List, Dict, Any, Tuple
-
 from utils.table_manager import DataTableManager
 from utils.export_utils import export_to_json, export_to_csv, export_to_tsv
 from utils.OBO_handler import obo
 from ui.donut_widget import Widget
 from utils.loading.DataLoader import FileLoaderThread
+from model.data_model import VirtualTableModel
+from utils.loading.BatchJsonLoaderThread import BatchJsonLoaderThread
+import logging
+from model.data_model import MAIN_HEADERS
+from utils.loading.StreamingJsonLoader import StreamingJsonLoader
 
-from PySide6.QtWidgets import (
-    QMainWindow, QTableView, QVBoxLayout, QGroupBox, QSplitter, QTabWidget,
-    QHeaderView, QWidget, QStatusBar, QProgressBar, QLineEdit, QComboBox, QPushButton, QLabel, QHBoxLayout, QMessageBox
-)
-from PySide6.QtCore import Qt, Signal, Slot
-from utils.table_manager import DataTableManager
-from utils.OBO_handler import obo
+logging.basicConfig(level=logging.DEBUG)
 
 class DynamicTableWindow(QMainWindow):
     data_loaded = Signal()
+    request_more_data = Signal(int)  # Signal emitted when we need more data
 
     def __init__(self, parsed_results, file_path, config=None):
         super().__init__()
@@ -43,11 +42,25 @@ class DynamicTableWindow(QMainWindow):
         self.config = config if config is not None else {}
         self.go_definitions = {}
         self.detail_tabs = {}
+        self.loader_thread = None  # Initialize loader_thread
+        self.large_data_handler = None
+    request_more_data = Signal(int)  # Signal emitted when we need more data
+
+    def __init__(self, parsed_results, file_path, config=None):
+        super().__init__()
+        self.file_path = file_path
+        self.parsed_results = parsed_results
+        self.config = config if config is not None else {}
+        self.go_definitions = {}
+        self.detail_tabs = {}
+        self.loader_thread = None  # Initialize loader_thread
+        self.large_data_handler = None
         
         self.load_config()
         self.init_ui()
 
     def load_config(self):
+        """Load configuration and GO definitions"""
         """Load configuration and GO definitions"""
         obo_file_path = self.config.get("obo_file_path", "./ontologies/go-basic.obo")
         self.go_definitions = obo.load_go_definitions(obo_file_path)
@@ -55,12 +68,43 @@ class DynamicTableWindow(QMainWindow):
     def init_ui(self):
         """Initialize main UI components"""
         self.setWindowTitle(f"Results - {self.file_path}")
+        
+        # Create main layout
+        main_widget = QWidget()
+        self.main_layout = QVBoxLayout(main_widget)
+        self.setCentralWidget(main_widget)
+
         self.create_main_table()
         self.create_menu_bar()
         self.create_filter_bar()
         self.create_tab_system()
         self.create_status_bar()
+        self.create_pagination_controls()
         self.connect_signals()
+        
+        # Initialize large data handler
+        from ui.large_data_handler import LargeDataHandler
+        self.large_data_handler = LargeDataHandler(self)
+
+        # Set memory monitoring timer
+        self._memory_monitor_timer = QTimer(self)
+        self._memory_monitor_timer.timeout.connect(self._check_memory_usage)
+        self._memory_monitor_timer.start(5000)  # Check every 5 seconds
+
+    def _check_memory_usage(self):
+        """Monitor memory usage and clean up if necessary"""
+        import psutil
+        process = psutil.Process()
+        memory_mb = process.memory_info().rss / (1024 * 1024)
+        
+        if memory_mb > 1000:  # Over 1GB
+            logging.warning(f"Memory usage high: {memory_mb:.2f} MB, forcing cleanup")
+            # Force aggressive cleanup
+            if hasattr(self, 'model') and hasattr(self.model, '_cleanup_memory'):
+                self.model._cleanup_memory(force_cleanup=True)
+            # Force garbage collection
+            import gc
+            gc.collect()
 
     def create_main_table(self):
         """Create and configure main table with virtual model"""
@@ -84,7 +128,8 @@ class DynamicTableWindow(QMainWindow):
         # Set column widths
         for col, width in DataTableManager.COLUMN_CONFIG["main"].items():
             try:
-                col_idx = VirtualTableModel.HEADERS.index(col)
+                # Use MAIN_HEADERS instead of VirtualTableModel.HEADERS
+                col_idx = MAIN_HEADERS.index(col)
                 self.table.setColumnWidth(col_idx, width)
             except ValueError:
                 print(f"Column {col} not found in headers")
@@ -124,12 +169,15 @@ class DynamicTableWindow(QMainWindow):
         self.progress_bar = QProgressBar()
         self.status_bar.addPermanentWidget(self.progress_bar)
         self.progress_bar.hide()
+ 
 
     def connect_signals(self):
         """Connect UI signals"""
         if self.table.model():
             self.table.selectionModel().selectionChanged.connect(self.on_selection_changed)
         self.data_loaded.connect(self.on_data_loaded)
+        if hasattr(self, 'request_more_data'):
+            self.request_more_data.connect(self.on_request_more_data)
 
     def on_selection_changed(self):
         """Handle table selection changes"""
@@ -302,61 +350,362 @@ class DynamicTableWindow(QMainWindow):
 
         except Exception as e:
             print(f"Error generating or displaying the GO graph: {e}")
+        # ...existing code...
             return None
 
-
-class VirtualTableModel(QAbstractTableModel):
-    HEADERS = ["Protein ID", "Description", "Length", "Results",
-               "PFAMs", "GO", "Classification",
-               "Preferred name", "COG", "Enzyme", "InterPro"]
-    PAGE_SIZE = 100
-
-    def __init__(self, data, go_definitions=None):
-        super().__init__()
-        self._data = data  # Directly assign the list of results
-        self._loaded_data = {}
-        self._go_definitions = go_definitions or {}
-        self._table_manager = DataTableManager()
-
-    def rowCount(self, parent=QModelIndex()):
-        return len(self._data)
-
-    def columnCount(self, parent=QModelIndex()):
-        return len(self.HEADERS)
-
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-
-        row = index.row()
-        col = index.column()
-
-        # Load page if needed
-        page = row // self.PAGE_SIZE
-        if page not in self._loaded_data:
-            self._load_page(page)
-
-        row_data = self._loaded_data[page][row % self.PAGE_SIZE]
+    def on_scroll_change(self, value):
+        """Handle scroll events for dynamic loading"""
+        # Use QTimer to delay widget creation which prevents UI freezing
+        QTimer.singleShot(10, self.create_visible_widgets)
         
-        if role == Qt.DisplayRole:
-            return str(row_data['display'].get(self.HEADERS[col], ""))
+        # Check if we're near the end of our data
+        model = self.table.model()
+        if not model:
+            return
             
-        return None
+        scrollbar = self.table.verticalScrollBar()
+        # If we're more than 80% through the loaded data, request more
+        if scrollbar.value() > scrollbar.maximum() * 0.8:
+            self.request_more_data.emit(model.rowCount())
 
-    def headerData(self, section, orientation, role):
-        if role == Qt.DisplayRole:
-            if orientation == Qt.Horizontal:
-                return self.HEADERS[section]
-            return str(section + 1)
-        return None
-
-    def _load_page(self, page):
-        start = page * self.PAGE_SIZE
-        end = min(start + self.PAGE_SIZE, len(self._data))
+    def create_visible_widgets(self):
+        """Create widgets ONLY for visible rows with ultra-efficient recycling"""
+        model = self.table.model()
+        if not model:
+            return
+            
+        # Get visible rows
+        visible_rect = self.table.viewport().rect()
+        first_visible = self.table.rowAt(visible_rect.top())
+        last_visible = self.table.rowAt(visible_rect.bottom())
         
-        page_data = []
-        for item in self._data[start:end]:
-            processed = DataTableManager._process_main_row(item, self._go_definitions)
-            page_data.append(processed)
+        if first_visible < 0:
+            first_visible = 0
+        if last_visible < 0:
+            last_visible = min(first_visible + 10, model.rowCount() - 1)
+        
+        # Extreme optimization: process even fewer widgets per frame
+        widgets_created = 0
+        max_widgets_per_frame = 3  # Create only 3 widgets per frame
+        
+        # Update model's visible range
+        model.setVisibleRows(first_visible, last_visible)
+        
+        # Try to recycle widgets first
+        if hasattr(model, 'recycle_widgets'):
+            model.recycle_widgets(first_visible, last_visible)
+        
+        # Create only essential widgets in visible area
+        for row in range(first_visible, last_visible + 1):
+            if widgets_created >= max_widgets_per_frame:
+                # Delay next widget creation to next frame
+                QTimer.singleShot(1, self.create_visible_widgets)
+                return
+                
+            if row >= model.rowCount() or row in model.loaded_rows:
+                continue
+                
+            # Mark as processed
+            model.loaded_rows.add(row)
             
-        self._loaded_data[page] = page_data
+            # Only process most important columns
+            essential_cols = ["Protein ID", "Description"]
+            for col_name in essential_cols:
+                try:
+                    col = model.HEADERS.index(col_name)
+                    # Create only if needed and doesn't exist
+                    if (row, col) in model.widget_cells and (row, col) not in model.widgets:
+                        self.create_widget_for_cell(row, col)
+                        widgets_created += 1
+                except ValueError:
+                    pass
+        
+        # Process pending events to keep UI responsive
+        QApplication.processEvents()
+
+    def on_request_more_data(self, current_count):
+        """Request more data to be loaded when scrolling near the end"""
+        # Initialize loader if needed
+        if not hasattr(self, 'streaming_loader') or self.streaming_loader is None:
+            # Show loading indicator in status bar
+            if hasattr(self, 'status_bar'):
+                self.status_bar.showMessage("Loading data from file...")
+                
+            # Use the memory-efficient loader with smaller batches
+            try:
+                from utils.loading.memory_efficient_loader import MemoryEfficientLoader
+                self.streaming_loader = MemoryEfficientLoader(
+                    self.file_path, 
+                    batch_size=25  # Smaller batches for more responsive UI
+                )
+            except ImportError:
+                # Fall back to regular loader if memory efficient one isn't available
+                self.streaming_loader = StreamingJsonLoader(
+                    self.file_path, 
+                    batch_size=25
+                )
+                
+            self.streaming_loader.batch_loaded.connect(self.on_data_batch_loaded)
+            self.streaming_loader.error_occurred.connect(self.on_loader_error)
+            self.streaming_loader.progress_updated.connect(self.on_load_progress)
+            self.streaming_loader.completed.connect(self.on_load_completed)
+            
+            # Start the streaming loader
+            self.streaming_loader.start()
+        else:
+            # Already loading - do nothing to avoid overwhelming the system
+            pass
+
+    def create_pagination_controls(self):
+        """Create pagination controls"""
+        self.pagination_widget = QWidget()
+        pagination_layout = QHBoxLayout(self.pagination_widget)
+        
+        self.page_info_label = QLabel("Page 1")
+        self.prev_button = QPushButton("Previous")
+        self.next_button = QPushButton("Next")
+        self.page_size_combo = QComboBox()
+        self.page_size_combo.addItems(["50", "100", "200", "500", "1000"])
+        self.page_size_combo.setCurrentIndex(1)  # Default to 100
+        self.page_jump = QSpinBox()
+        self.page_jump.setMinimum(1)
+        self.page_jump.setMaximum(1)
+        self.page_jump_button = QPushButton("Go")
+        
+        pagination_layout.addWidget(QLabel("Items per page:"))
+        pagination_layout.addWidget(self.page_size_combo)
+        pagination_layout.addWidget(self.prev_button)
+        pagination_layout.addWidget(self.page_info_label)
+        pagination_layout.addWidget(self.next_button)
+        pagination_layout.addWidget(QLabel("Jump to:"))
+        pagination_layout.addWidget(self.page_jump)
+        pagination_layout.addWidget(self.page_jump_button)
+        pagination_layout.addStretch()
+        
+        self.main_layout.addWidget(self.pagination_widget)
+        
+
+        # Connect signals
+        self.prev_button.clicked.connect(self.on_prev_page)
+        self.next_button.clicked.connect(self.on_next_page)
+        self.page_jump_button.clicked.connect(self.on_page_jump)
+        self.page_size_combo.currentIndexChanged.connect(self.on_page_size_changed)
+        
+        # Add scroll event handling
+        self.table.verticalScrollBar().valueChanged.connect(self.on_scroll_change)
+        
+        # Hide until data is loaded
+        self.pagination_widget.setVisible(False)
+
+    def on_prev_page(self):
+        model = self.table.model()
+        if model and model.current_page > 0:
+            model.setPage(model.current_page - 1)
+            self.update_pagination_info()
+            self.create_visible_widgets()
+    
+    def on_next_page(self):
+        model = self.table.model()
+        if model:
+            max_page = max(0, (model.rowCount() - 1) // model.PAGE_SIZE)
+            if model.current_page < max_page:
+                model.setPage(model.current_page + 1)
+                self.update_pagination_info()
+                self.create_visible_widgets()
+    
+    def on_page_jump(self):
+        model = self.table.model()
+        if model:
+            page = self.page_jump.value() - 1  # 0-based indexing internally
+            max_page = max(0, (model.rowCount() - 1) // model.PAGE_SIZE)
+            page = max(0, min(page, max_page))
+            model.setPage(page)
+            self.update_pagination_info()
+    def on_page_size_changed(self):
+        model = self.table.model()
+        if model:
+            size = int(self.page_size_combo.currentText())
+            model.PAGE_SIZE = size
+            model.setPage(0)  # Reset to first page
+            self.update_pagination_info()
+            self.create_visible_widgets()
+    
+    def update_pagination_info(self):
+        model = self.table.model()
+        if model:
+            total_rows = model.rowCount()
+            page_size = model.PAGE_SIZE
+            current_page = model.current_page + 1  # 1-based for display
+            max_page = max(1, (total_rows + page_size - 1) // page_size)
+            
+            start_row = model.current_page * page_size + 1
+            end_row = min(start_row + page_size - 1, total_rows)
+            
+            self.page_info_label.setText(f"Page {current_page}/{max_page} (rows {start_row}-{end_row} of {total_rows})")
+            self.page_jump.setMaximum(max_page)
+            self.page_jump.setValue(current_page)
+            
+            self.prev_button.setEnabled(current_page > 1)
+            self.next_button.setEnabled(current_page < max_page)
+    
+    def create_visible_widgets(self):
+        """Create widgets only for visible rows with throttling"""
+        model = self.table.model()
+        if not model:
+            return
+            
+        # Get visible rows
+        from_data_mgr = hasattr(model, "widgets") and hasattr(model, "widget_cells")
+        if not from_data_mgr:
+            return
+        
+        visible_rect = self.table.viewport().rect()
+        first_visible = self.table.rowAt(visible_rect.top())
+        last_visible = self.table.rowAt(visible_rect.bottom())
+        
+        if first_visible < 0:
+            first_visible = 0
+        if last_visible < 0:
+            last_visible = min(first_visible + 20, model.rowCount() - 1)
+        
+        # Update model's visible range
+        model.setVisibleRows(first_visible, last_visible)
+        
+        # Limit the number of widgets to create per call to prevent freezing
+        widgets_created = 0
+        max_widgets_per_call = 10
+        
+        # Create widgets only for visible rows
+        for row in range(first_visible, last_visible + 1):
+            if widgets_created >= max_widgets_per_call:
+                # Schedule another call to continue creating widgets
+                QTimer.singleShot(50, self.create_visible_widgets)
+                return
+                
+            if row >= model.rowCount():
+                continue
+                
+            if row in model.loaded_rows:
+                continue  # Skip already processed rows
+                
+            model.loaded_rows.add(row)
+            
+            for col in range(model.columnCount()):
+                # Only process widget cells
+                if (row, col) in model.widget_cells and (row, col) not in model.widgets:
+                    self.create_widget_for_cell(row, col)
+                    widgets_created += 1
+                    
+                    if widgets_created >= max_widgets_per_call:
+                        break
+
+    def create_widget_for_cell(self, row, col):
+        """Create a widget for the specified cell if needed"""
+        model = self.table.model()
+        if not model or row >= len(model._data):
+            return
+            
+        row_data = model._data[row]
+        if "widgets" not in row_data:
+            return
+            
+        widgets_data = row_data["widgets"]
+        header = model.HEADERS[col]
+        
+        # Find matching widget info
+        matching_key = None
+        for key in widgets_data.keys():
+            if key.lower() == header.lower():
+                matching_key = key
+                break
+                
+        if not matching_key:
+            return
+            
+        widget_info = widgets_data[matching_key]
+        widget_type = widget_info.get("type")
+        widget_data = widget_info.get("data")
+        
+        if widget_type and widget_data is not None:
+            try:
+                from utils.table_manager import DataTableManager
+                widget = DataTableManager.create_widget(widget_type, widget_data, model.go_definitions)
+                if widget:
+                    model.widgets[(row, col)] = widget
+                    self.table.setIndexWidget(model.index(row, col), widget)
+            except Exception as e:
+                logging.error(f"Error creating widget for cell ({row}, {col}): {str(e)}")
+
+    def on_scroll_change(self, value):
+        """Handle scroll events to load widgets for newly visible rows"""
+        self.create_visible_widgets()
+        
+        # Check if we're near the end of our data
+        model = self.table.model()
+        if not model:
+            return
+            
+        scrollbar = self.table.verticalScrollBar()
+        # If we're more than 80% through the loaded data, request more
+        if scrollbar.value() > scrollbar.maximum() * 0.8:
+            self.request_more_data.emit(model.rowCount())
+
+    def on_data_batch_loaded(self, batch, start_index, total_count):
+        """Handle loaded data batch"""
+        from utils.table_manager import DataTableManager
+        
+        # Process batch
+        processed_data = DataTableManager.process_batch(batch, self.go_definitions)
+        
+        # Add to model
+        model = self.table.model()
+        if model:
+            first_new_row = model.rowCount()
+            model.beginInsertRows(QModelIndex(), first_new_row, first_new_row + len(processed_data) - 1)
+        # Show progress in status bar
+            model._data.extend(processed_data)
+            model.endInsertRows()
+            
+            # Update UI
+            self.update_pagination_info()
+
+    def on_loader_error(self, error_msg):
+        """Handle loader errors"""
+        self.handle_error(error_msg)
+        self.process_events()  # Keep UI responsive
+
+    def on_load_progress(self, current, total):
+        """Update UI with loading progress"""
+        # Show progress in status bar
+        if hasattr(self, 'status_bar'):
+            self.status_bar.showMessage(f"Loading data: {current}/{total} records ({current*100//total}%)")
+            
+        # Update progress bar
+        if hasattr(self, 'progress_bar'):
+            self.progress_bar.show()
+            self.progress_bar.setMaximum(total)
+            self.progress_bar.setValue(current)
+
+    def on_load_completed(self, total):
+        """Handle load completion"""
+        if hasattr(self, 'status_bar'):
+            self.status_bar.showMessage(f"Loaded {total} records")
+            
+        if hasattr(self, 'progress_bar'):
+            self.progress_bar.hide()
+            
+        # Make pagination visible
+        if hasattr(self, 'pagination_widget'):
+            try:
+                self.pagination_widget.setVisible(True)
+            except RuntimeError:
+                # Widget was deleted - recreate it
+                logging.warning("Pagination widget was deleted, recreating it")
+                self.create_pagination_controls()
+                if hasattr(self, 'pagination_widget'):
+                    self.pagination_widget.setVisible(True)
+
+
+
+
+

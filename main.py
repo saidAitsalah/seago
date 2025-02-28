@@ -1,4 +1,10 @@
 import sys
+import os
+#addign model path to main.py
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'model')))
+
+
+import sys
 import traceback
 import time
 import asyncio
@@ -15,6 +21,11 @@ from ui.table_window import DynamicTableWindow
 from utils.table_manager import DataTableManager
 import timeit
 import logging
+import ijson
+import traceback
+import json
+from utils.BatchJsonLoaderThread import BatchJsonLoaderThread
+
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -24,25 +35,6 @@ class AppSignals(QObject):
     error_occurred = Signal(str)
     task_cancelled = Signal()
     data_loaded = Signal(list)
-
-class DataLoaderThread(QThread):
-    data_loaded = Signal(list)
-
-    def __init__(self, file_path: str):
-        super().__init__()
-        self.file_path = file_path
-        print(f"DataLoaderThread initialized with file path: {file_path}")  # Log file path
-
-    def run(self):
-        try:
-            print(f"Loading data from file: {self.file_path}")  # Log file path
-            with open(self.file_path, 'r') as file:
-                data = json.load(file)
-            results = data.get("results", [])
-            self.data_loaded.emit(results)
-        except Exception as e:
-            print(f"Error loading data: {e}")
-
 class AppController(QObject):
     def __init__(self, app):
         super().__init__()
@@ -99,18 +91,57 @@ class AppController(QObject):
         self.start_time = time.time()
         self._show_loading_state(True)
         self.signals.progress_updated.emit(1, "Loading file...")
-        self.loader_thread = DataLoaderThread(file_path)
-        self.loader_thread.data_loaded.connect(self.on_data_loaded)
+        self.data = []  # Reset data
+        
+        # Using the new BatchJsonLoaderThread
+        self.loader_thread = BatchJsonLoaderThread(file_path, batch_size=10000)
+        self.loader_thread.data_batch_loaded.connect(self.on_data_batch_loaded)
+        self.loader_thread.progress_updated.connect(lambda val, msg: self.signals.progress_updated.emit(val, msg))
+        self.loader_thread.error_occurred.connect(lambda msg: self.signals.error_occurred.emit(msg))
         self.loader_thread.start()
+
+    def on_data_batch_loaded(self, data_batch, is_last_batch):
+        try:
+            if not hasattr(self, 'results_widget') or not self.results_widget:
+                # First batch: create the UI structure
+                self.results_widget = DynamicTableWindow([], getattr(self.loader_thread, 'file_path', ''))
+                self.central_layout.addWidget(self.results_widget)
+                    
+                # Create model with first batch
+                model = DataTableManager.populate_table(
+                    self.results_widget.table, 
+                    data_batch, 
+                    self.results_widget.go_definitions
+                )
+            else:
+                # Use appendRows without the create_widgets parameter
+                processed_rows = [DataTableManager._process_main_row(item, self.results_widget.go_definitions) for item in data_batch]
+                self.results_widget.table.model().appendRows(processed_rows)
+            
+            # Process events less frequently - just once per batch
+            QApplication.processEvents()
+            
+            if is_last_batch:
+                self._show_loading_state(False)
+                total_time = time.time() - self.start_time
+                print(f"Total execution time: {total_time:.2f} seconds")
+                    
+        except Exception as e:
+            print(f"Error in on_data_batch_loaded: {str(e)}")
+            traceback.print_exc()
 
     def on_data_loaded(self, data):
         try:
             print("Data loaded:", len(data) if data else "No data")  # Log data size
             self.data = data
             self._show_loading_state(False)
-            
-            if data:
+            if not data:
+                logging.warning("Received empty data in on_data_loaded")
+        # Vérifiez le format des données
+            if data and isinstance(data, list) and len(data) > 0:
                 # Pass the actual file path that was used to load the data
+                logging.debug(f"First item keys: {data[0].keys()}")
+
                 current_file_path = getattr(self.loader_thread, 'file_path', '')
                 self.show_results(data, current_file_path)
                 
@@ -154,6 +185,7 @@ class AppController(QObject):
                     elif value is None and col in widgets:
                         table.setCellWidget(row_position, col, widgets[col])
 
+
     async def _show_async_file_dialog(self) -> Optional[str]:
         dialog = QFileDialog(self.main_window)
         dialog.setWindowModality(Qt.ApplicationModal)
@@ -172,15 +204,23 @@ class AppController(QObject):
         self.signals.progress_updated.emit(progress, message)
         self.app.processEvents()
 
-    def _show_loading_state(self, loading: bool):
-        self.progress_bar.setVisible(loading)
-        self.cancel_btn.setVisible(loading)
-        self.app.processEvents()
+    def _show_loading_state(self, is_loading):
+        """Show or hide loading UI elements"""
+        if (is_loading):
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(0)
+            self.progress_bar.show()
+            self.cancel_btn.show()
+        else:
+            self.progress_bar.hide()
+            self.cancel_btn.hide()
+            
 
-    def update_progress(self, value: int, message: str):
+    def update_progress(self, value, message=""):
+        """Update progress bar and status message"""
         self.progress_bar.setValue(value)
-        self.main_window.statusBar().showMessage(message)
-        self.app.processEvents()
+        if message:
+            self.main_window.statusBar().showMessage(message)
 
     def show_results(self, parsed_results, file_path: str):
         try:
@@ -192,11 +232,15 @@ class AppController(QObject):
             # Ensure we have valid data before creating the widget
             if parsed_results:
                 #logging.debug(f"Parsed results: {parsed_results}")
+                for i, row in enumerate(parsed_results):
+                    if not isinstance(row, dict):
+                        print(f"Row {i} is not a dictionary: {row}")
+                        raise ValueError("Each row in parsed_results must be a dictionary")
+
 
                 self.results_widget = DynamicTableWindow(parsed_results, file_path)
                 self.central_layout.addWidget(self.results_widget)
                 
-                # Appelez populate_table ici
                 DataTableManager.populate_table(self.results_widget.table, parsed_results, self.results_widget.go_definitions)
                 
                 end_time = time.time()
@@ -213,9 +257,11 @@ class AppController(QObject):
             traceback.print_exc()
 
     def cancel_current_task(self):
-        if self.current_task and not self.current_task.done():
-            self.current_task.cancel()
-            self.signals.task_cancelled.emit()
+        """Cancel the current loading task"""
+        if hasattr(self, 'loader_thread') and self.loader_thread.isRunning():
+            self.loader_thread.stop()
+            self._show_loading_state(False)
+            self.main_window.statusBar().showMessage("Operation cancelled")
 
     def handle_task_cancellation(self):
         self.signals.error_occurred.emit("Tâche annulée par l'utilisateur")
