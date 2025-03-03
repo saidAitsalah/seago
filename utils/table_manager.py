@@ -244,6 +244,19 @@ class DataTableManager:
     """****************************************helpers for processing main rows****************************"""
 
     @staticmethod
+    def safe_text_for_widget(text):
+        """Make text safe for display in widgets, avoiding font parsing issues"""
+        if not text:
+            return ""
+        
+        # Replace problematic characters that cause QFont parsing errors
+        if isinstance(text, str) and (',' in text or ';' in text):
+            # For text containing commas that cause font parsing errors
+            return text.replace(',', '·').replace(';', '·')
+        
+        return str(text)
+
+    @staticmethod
     def _process_go_terms(gos_str, go_definitions):
         """Process GO terms for display"""
         return gos_str.split(',')[:7]
@@ -733,13 +746,15 @@ class DataTableManager:
     Returns:
         QWidget: The created widget. If an error occurs, a QLabel with an error message is returned.
     """
-    @staticmethod
+# In utils/table_manager.py - Modify the create_widget method:
+
     def create_widget(widget_type, data, go_definitions=None):
         """Create optimized widgets for table cells"""
         try:
             if widget_type == "text":
-                # Simple text widgets are most efficient
-                label = QLabel(str(data))
+                # Simple text widgets with safe text handling
+                safe_text = DataTableManager.safe_text_for_widget(str(data))
+                label = QLabel(safe_text)
                 label.setMaximumWidth(300)  # Prevent excessive width
                 return label
                 
@@ -754,7 +769,7 @@ class DataTableManager:
                 display_tags = data[:3] if len(data) > 3 else data
                 
                 for tag_type, value in display_tags:
-                    label = QLabel(str(value))
+                    label = QLabel(DataTableManager.safe_text_for_widget(str(value)))
                     label.setAlignment(Qt.AlignCenter)
                     label.setFixedSize(30, 20)
                     style = DataTableManager.STYLES["tag"].get(tag_type, DataTableManager.STYLES["tag"]["default"])
@@ -918,19 +933,28 @@ class DataTableManager:
             if not filtered_annotations:
                 label_text = "No annotations"
             else:
-                label_text = "\n".join(filtered_annotations)
+                # Escape commas in domain names by replacing them with HTML encoding
+                # This prevents Qt from trying to parse them as font descriptions
+                escaped_annotations = []
+                for annotation in filtered_annotations:
+                    if "," in annotation:
+                        # Use HTML formatting instead of plain text
+                        escaped_annotations.append(annotation.replace(",", "&#44;"))
+                    else:
+                        escaped_annotations.append(annotation)
+                        
+                label_text = "<br>".join(escaped_annotations)
                 
-            label = QLabel(label_text)
+            label = QLabel()
+            label.setTextFormat(Qt.RichText)  # Enable rich text interpretation
+            label.setText(label_text)
             label.setStyleSheet(DataTableManager.STYLES["interpro"] + "min-height: 30px; border-radius: 4px;")
             label.setWordWrap(True)  # Allow text to wrap
-            label.setMinimumHeight(30)  # Minimum height
-            label.setMinimumWidth(150)  # Set minimum width
+            
             return label
         except Exception as e:
-            logging.error(f"Error creating InterPro widget: {str(e)}")
-            error_label = QLabel(f"Error: {str(e)}")
-            error_label.setStyleSheet("color: red;")
-            return error_label
+            print(f"Error creating InterPro widget: {e}")
+            return QLabel(f"Error: {str(e)}")
     """
     Create an icon widget for classification status.
     Args:

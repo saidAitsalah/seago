@@ -94,7 +94,7 @@ class AppController(QObject):
         self.data = []  # Reset data
         
         # Using the new BatchJsonLoaderThread
-        self.loader_thread = BatchJsonLoaderThread(file_path, batch_size=10000)
+        self.loader_thread = BatchJsonLoaderThread(file_path, batch_size=1000)
         self.loader_thread.data_batch_loaded.connect(self.on_data_batch_loaded)
         self.loader_thread.progress_updated.connect(lambda val, msg: self.signals.progress_updated.emit(val, msg))
         self.loader_thread.error_occurred.connect(lambda msg: self.signals.error_occurred.emit(msg))
@@ -113,16 +113,32 @@ class AppController(QObject):
                     data_batch, 
                     self.results_widget.go_definitions
                 )
+                
+                # Important: Set total rows in model if we have that information
+                if hasattr(self.loader_thread, 'total_count') and self.loader_thread.total_count > 0:
+                    model._total_rows = self.loader_thread.total_count
+                    
             else:
                 # Use appendRows without the create_widgets parameter
                 processed_rows = [DataTableManager._process_main_row(item, self.results_widget.go_definitions) for item in data_batch]
-                self.results_widget.table.model().appendRows(processed_rows)
+                model = self.results_widget.table.model()
+                if model:
+                    model._total_rows = self.loader_thread.total_count
+                model.appendRows(processed_rows)
+                
+                # Update total rows count
+                if hasattr(self.loader_thread, 'total_count') and self.loader_thread.total_count > 0:
+                    model._total_rows = self.loader_thread.total_count
             
             # Process events less frequently - just once per batch
             QApplication.processEvents()
             
             if is_last_batch:
                 self._show_loading_state(False)
+                # Show pagination controls and update info
+                if hasattr(self.results_widget, 'pagination_widget'):
+                    self.results_widget.pagination_widget.setVisible(True)
+                    self.results_widget.update_pagination_info()
                 total_time = time.time() - self.start_time
                 print(f"Total execution time: {total_time:.2f} seconds")
                     
