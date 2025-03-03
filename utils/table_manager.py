@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt,QModelIndex
 import itertools
 from model.data_model import VirtualTableModel,WidgetDelegate
 import logging
+import traceback
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -228,7 +229,9 @@ class DataTableManager:
             "Results": {"type": "tags", "data": display_data["Results"]},
             "GO": {"type": "go", "data": display_data["GO"]},
             "Classification": {"type": "icon", "data": display_data["Classification"]},
-            "InterPro": {"type": "interpro", "data": display_data["InterPro"]}
+            "InterPro": {"type": "interpro", "data": display_data["InterPro"]},
+            "PFAMs": {"type": "pfam", "data": display_data["PFAMs"]} 
+
         }
 
         # Add missing keys
@@ -246,15 +249,21 @@ class DataTableManager:
     @staticmethod
     def safe_text_for_widget(text):
         """Make text safe for display in widgets, avoiding font parsing issues"""
-        if not text:
+        if text is None:
             return ""
         
-        # Replace problematic characters that cause QFont parsing errors
-        if isinstance(text, str) and (',' in text or ';' in text):
-            # For text containing commas that cause font parsing errors
-            return text.replace(',', '·').replace(';', '·')
+        # Convert to string if not already
+        text = str(text)
         
-        return str(text)
+        # Escape commas in text to prevent Qt from interpreting as font descriptions
+        if ',' in text:
+            # Use a middle dot or similar character instead of comma
+            text = text.replace(",", "·")
+        
+        # Handle other problematic characters
+        text = text.replace("<", "&lt;").replace(">", "&gt;")
+        
+        return text
 
     @staticmethod
     def _process_go_terms(gos_str, go_definitions):
@@ -548,7 +557,6 @@ class DataTableManager:
                     except Exception as e:
                         logging.error(f"Error creating widget for cell ({row}, {col}): {e}")
         
-        # Ensure proper display
         #table.resizeRowsToContents()
         table.viewport().update()
         logging.debug(f"Table populated with {len(processed_data)} rows")
@@ -746,87 +754,63 @@ class DataTableManager:
     Returns:
         QWidget: The created widget. If an error occurs, a QLabel with an error message is returned.
     """
-# In utils/table_manager.py - Modify the create_widget method:
 
     def create_widget(widget_type, data, go_definitions=None):
-        """Create optimized widgets for table cells"""
+        """Create optimized widgets for table cells with improved PFAMs handling"""
         try:
-            if widget_type == "text":
+            if widget_type == "pfam":
+                # Enhanced PFAMs widget with better error handling
+                widget = QWidget()
+                layout = QHBoxLayout(widget)
+                layout.setContentsMargins(2, 2, 2, 2)
+                
+                # Make sure we have a string representation
+                if data is None:
+                    data_str = "N/A"
+                else:
+                    data_str = str(data)
+                    
+                # Check if it's a comma-separated list
+                 # Check if it's a comma-separated list
+                if "," in data_str:
+                    # Replace comma with middle dot for display - avoids font parsing errors
+                    display_text = data_str.replace(",", " · ")
+                    if len(display_text) > 40:
+                        display_text = display_text[:37] + "..."
+                else:
+                    display_text = data_str
+        
+                label = QLabel(display_text)
+                label.setToolTip(data_str)  # Show original in tooltip
+                label.setStyleSheet("color: #2962FF;")
+                layout.addWidget(label)
+                layout.addStretch()
+                return widget
+                
+            # Handle other widget types
+            elif widget_type == "text":
                 # Simple text widgets with safe text handling
                 safe_text = DataTableManager.safe_text_for_widget(str(data))
                 label = QLabel(safe_text)
                 label.setMaximumWidth(300)  # Prevent excessive width
                 return label
                 
+                
             elif widget_type == "tags":
-                # For tags, create a simplified version for large datasets
-                widget = QWidget()
-                layout = QHBoxLayout(widget)
-                layout.setContentsMargins(2, 2, 2, 2)
-                layout.setSpacing(2)
-                
-                # Limit to first 3 tags
-                display_tags = data[:3] if len(data) > 3 else data
-                
-                for tag_type, value in display_tags:
-                    label = QLabel(DataTableManager.safe_text_for_widget(str(value)))
-                    label.setAlignment(Qt.AlignCenter)
-                    label.setFixedSize(30, 20)
-                    style = DataTableManager.STYLES["tag"].get(tag_type, DataTableManager.STYLES["tag"]["default"])
-                    label.setStyleSheet(f"{style} border-radius: 3px; padding: 2px;")
-                    layout.addWidget(label)
-                    
-                if len(data) > 3:
-                    more_label = QLabel(f"+{len(data)-3}")
-                    more_label.setAlignment(Qt.AlignCenter)
-                    more_label.setStyleSheet("color: #666;")
-                    layout.addWidget(more_label)
-                    
-                layout.addStretch()
-                return widget
+                # Call the specialized method
+                return DataTableManager.create_tag_widget(data)
                 
             elif widget_type == "go":
-                # Simplify GO widgets
-                if not data:
-                    return QLabel("No GO terms")
-                    
-                # Show count for large lists
-                if isinstance(data, list) and len(data) > 3:
-                    return QLabel(f"{len(data)} GO terms")
-                    
-                # Show first term only
-                go_id = data[0] if isinstance(data, list) and data else str(data).split(',')[0]
-                desc, go_type = go_definitions.get(go_id, ("", ""))
-                label = QLabel(f"{go_id} - {go_type}")
-                return label
+                # Call the specialized method
+                return DataTableManager._create_go_widget(data, go_definitions)
                 
             elif widget_type == "interpro":
-                # Simplify interpro widgets
-                if not data or (isinstance(data, list) and not data):
-                    return QLabel("No data")
-                    
-                # Show count for large lists
-                if isinstance(data, list) and len(data) > 2:
-                    return QLabel(f"{len(data)} annotations")
-                    
-                # Show first item only
-                if isinstance(data, list):
-                    text = str(data[0])
-                else:
-                    text = str(data)
-                    
-                if len(text) > 50:
-                    text = text[:47] + "..."
-                    
-                return QLabel(text)
+                # Call the specialized method
+                return DataTableManager._create_interpro_widget(data)
                 
             elif widget_type == "icon":
-                # Simplified icon
-                icon_type = "classified" if data == "classified" else "unclassified"
-                label = QLabel(icon_type.capitalize())
-                color = "#4CAF50" if icon_type == "classified" else "#F44336"
-                label.setStyleSheet(f"color: {color}; font-weight: bold;")
-                return label
+                # Call the specialized method
+                return DataTableManager.create_icon_widget(data)
                 
             else:
                 return QLabel(str(data))
@@ -884,7 +868,8 @@ class DataTableManager:
             if not go_id:  # Ignorer les entrées vides
                 continue
             desc, go_type = go_definitions.get(go_id, ("No description", ""))
-            content.append(f"<p>{go_id} - <b>{go_type}</b> - {desc}</p>")
+            highlighted_go_type = f"<span style='background-color: yellow;'>{go_type}</span>"
+            content.append(f"<p>{go_id} - <b>{highlighted_go_type}</b> - {desc}</p>")
         
         if isinstance(gos_data, str) and len(gos_data.split(',')) > 7:
             content.append("<p>...</p>")
@@ -910,14 +895,17 @@ class DataTableManager:
     Returns:
         QLabel: The created InterPro widget. If an error occurs, a QLabel with an error message is returned.
     """
+ # Also in utils/table_manager.py
+# In utils/table_manager.py - update _create_interpro_widget method
+
     @staticmethod
     def _create_interpro_widget(data):
-        """Crée le widget InterPro"""
+        """Creates the InterPro widget with proper text handling"""
         try:
             if not data:
                 return QLabel("No InterPro data")
                 
-            # Handle case where data is already a list of strings
+            # Handle different data formats
             if isinstance(data, list):
                 if data and isinstance(data[0], str):
                     annotations = data
@@ -925,31 +913,23 @@ class DataTableManager:
                     # Original behavior for list of dictionaries
                     annotations = [ip.get("interpro", "") for ip in data if isinstance(ip, dict)]
             else:
-                # Handle string or other types
                 annotations = [str(data)]
                 
-            # Filter out empty strings and join with newlines
-            filtered_annotations = list(filter(None, annotations))
-            if not filtered_annotations:
-                label_text = "No annotations"
-            else:
-                # Escape commas in domain names by replacing them with HTML encoding
-                # This prevents Qt from trying to parse them as font descriptions
-                escaped_annotations = []
-                for annotation in filtered_annotations:
-                    if "," in annotation:
-                        # Use HTML formatting instead of plain text
-                        escaped_annotations.append(annotation.replace(",", "&#44;"))
-                    else:
-                        escaped_annotations.append(annotation)
-                        
-                label_text = "<br>".join(escaped_annotations)
-                
+            # Filter out empty strings and make text safe
+            filtered_annotations = []
+            for annotation in list(filter(None, annotations)):
+                # Always use safe_text_for_widget to process any text
+                safe_annotation = DataTableManager.safe_text_for_widget(annotation)
+                filtered_annotations.append(safe_annotation)
+                    
+            # Join with HTML breaks for multiline display
+            label_text = "<br>".join(filtered_annotations) if filtered_annotations else "No annotations"
+            
             label = QLabel()
-            label.setTextFormat(Qt.RichText)  # Enable rich text interpretation
+            label.setTextFormat(Qt.RichText)
             label.setText(label_text)
             label.setStyleSheet(DataTableManager.STYLES["interpro"] + "min-height: 30px; border-radius: 4px;")
-            label.setWordWrap(True)  # Allow text to wrap
+            label.setWordWrap(True)
             
             return label
         except Exception as e:
@@ -1001,6 +981,43 @@ class DataTableManager:
     def update_widget(widget, widget_type, data, go_definitions=None):
         """Update an existing widget with new data instead of creating a new one"""
         try:
+            if widget_type == "pfam":
+                # Handle PFAM widget updates
+                if hasattr(widget, 'layout') and widget.layout():
+                    layout = widget.layout()
+                    
+                    # Find the QLabel in the layout
+                    for i in range(layout.count()):
+                        item = layout.itemAt(i)
+                        if item and item.widget() and isinstance(item.widget(), QLabel):
+                            label = item.widget()
+                            
+                            # Prepare display text using same logic as create_widget
+                            if data is None:
+                                data_str = "N/A"
+                            else:
+                                data_str = str(data)
+                                
+                            # Process the data with proper text sanitization
+                            if "," in data_str:
+                                domains = data_str.split(",")
+                                domains = [d.strip() for d in domains if d.strip()]
+                                
+                                if len(domains) > 3:
+                                    domain1 = DataTableManager.safe_text_for_widget(domains[0])
+                                    domain2 = DataTableManager.safe_text_for_widget(domains[1])
+                                    display_text = f"{domain1} · {domain2} +{len(domains)-2}"
+                                else:
+                                    safe_domains = [DataTableManager.safe_text_for_widget(d) for d in domains]
+                                    display_text = " · ".join(safe_domains)
+                            else:
+                                display_text = DataTableManager.safe_text_for_widget(data_str)
+                            
+                            # Update the label
+                            label.setText(display_text)
+                            label.setToolTip(data_str)
+                            break
+
             if widget_type == "tags":
                 # Update tag labels
                 if hasattr(widget, 'layout'):

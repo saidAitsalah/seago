@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QDialog, QStatusBar, QTextEdit, QTabWidget, QComboBox,QHeaderView,QTableView,
     QTableWidgetItem, QProgressBar,QSpinBox
 )
+from PySide6 import QtWidgets
 from PySide6.QtGui import (
     QAction, QIcon, QPainter, QColor, QFont, QPixmap, QKeySequence, QShortcut
 )
@@ -61,23 +62,23 @@ class DynamicTableWindow(QMainWindow):
         self.setCentralWidget(self.main_widget)
         self.main_layout = QVBoxLayout(self.main_widget)
 
-        # Reserve space for pagination at the bottom
-        self.pagination_container = QWidget()
-        self.pagination_container_layout = QVBoxLayout(self.pagination_container)
-        self.pagination_container_layout.setContentsMargins(0, 0, 0, 0)
-        self.pagination_container.setMinimumHeight(60)  # Reserve space
+        """     # Reserve space for pagination at the bottom
+                self.pagination_container = QWidget()
+                self.pagination_container_layout = QVBoxLayout(self.pagination_container)
+                self.pagination_container_layout.setContentsMargins(0, 0, 0, 0)
+                self.pagination_container.setMinimumHeight(60)  # Reserve space """
+        self.create_filter_bar()
 
         self.create_main_table()
         self.create_menu_bar()
-        self.create_filter_bar()
         self.create_tab_system()
         self.create_status_bar()
         
         # Add pagination container to the bottom of the main layout
-        self.main_layout.addWidget(self.pagination_container)
+        #self.main_layout.addWidget(self.pagination_container)
         
         # Now create pagination controls inside the container
-        self.create_pagination_controls()
+        #self.create_pagination_controls()
         self.connect_signals()
         
         # Initialize large data handler
@@ -92,6 +93,7 @@ class DynamicTableWindow(QMainWindow):
         # Add keyboard shortcut to reveal pagination
         self.show_pagination_shortcut = QShortcut(QKeySequence("F5"), self)
         self.show_pagination_shortcut.activated.connect(self.reveal_pagination)
+        self.table.verticalScrollBar().valueChanged.connect(self.on_scroll_change)
         
         # Show pagination debug info in status bar
         self.status_bar.showMessage("Press F5 to reveal pagination controls if they're hidden")
@@ -120,11 +122,17 @@ class DynamicTableWindow(QMainWindow):
         self.model = VirtualTableModel(self.parsed_results, self.go_definitions)
         self.table.setModel(self.model)
 
+        from model.data_model import WidgetDelegate
+        self.widget_delegate = WidgetDelegate()
+        self.table.setItemDelegate(self.widget_delegate)
+
         # Configure table
         self.table.setObjectName("MainResultsTable")
         header = self.table.horizontalHeader()
         header.setStretchLastSection(True)
         header.setSectionResizeMode(QHeaderView.Interactive)
+        #set stylesheet for headers
+        header.setStyleSheet(DataTableManager.STYLES["header"])
 
         # Optimize scrolling
         self.table.setHorizontalScrollMode(QTableView.ScrollPerPixel)
@@ -140,32 +148,216 @@ class DynamicTableWindow(QMainWindow):
                 print(f"Column {col} not found in headers")
 
         layout = QVBoxLayout()
+        layout.addLayout(self.filter_layout)
+
         layout.addWidget(self.table)
+
+        self.create_pagination_controls(layout)
         self.table_group_box.setLayout(layout)
 
+    def open_dialog(self):
+            dialog = QDialog()
+            #to review
+            dialog.deleteLater()  # Marks the widget for deletion
+            dialog.setWindowTitle("Filter options")
+            dialog.setWindowIcon(QIcon('./assets/image.png'))
+
+            dialog.setFixedSize(400, 300)  
+
+            dialog.setStyleSheet("""
+                QDialog {
+                    background-color: #D7D7D7; 
+                    color: white;              
+                    border-radius: 10px;       
+                }
+                QLabel {
+                    font-size: 14px;
+                    font-weight: bold;
+                }
+                QLineEdit {
+                    background-color: white;
+                    border: 1px solid #077187;
+                    border-radius: 5px;
+                    padding: 5px;
+                    color: #000;
+                }
+                QPushButton {
+                    background-color: #077187;
+                    color: white;
+                    border-radius: 5px;
+                    padding: 5px 10px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #ED7D3A;
+                }
+                QPushButton:pressed {
+                    background-color: #4F518C;
+                }
+            """)
+
+            dialog_layout = QVBoxLayout()
+
+            dialog_input = QLineEdit()
+            dialog_input.setPlaceholderText("Enter your filter value")
+            dialog_layout.addWidget(dialog_input)
+
+            add_filter_button = QPushButton("Add Filter")
+            add_filter_button.setIcon(QIcon("./assets/filter.png"))
+            add_filter_button.clicked.connect(self.add_filter_field)
+            dialog_layout.addWidget(add_filter_button)
+
+            clear_button = QPushButton("Clear All Filters")
+            clear_button.setIcon(QIcon("./assets/clear-filter.png"))
+            clear_button.clicked.connect(self.clear_filters)
+            dialog_layout.addWidget(clear_button)
+
+            ok_button = QPushButton("OK")
+            ok_button.clicked.connect(dialog.accept)  
+            button_layout = QHBoxLayout()
+            button_layout.addWidget(add_filter_button)
+            button_layout.addWidget(clear_button)
+            button_layout.addWidget(ok_button)
+
+            dialog_layout.addWidget(add_filter_button)
+            dialog_layout.addWidget(clear_button)
+            dialog_layout.addWidget(ok_button)
+
+            dialog_layout.addLayout(button_layout)
+
+        
+            dialog.setLayout(dialog_layout)
+
+            dialog.exec()
+
+    
+    
     def create_filter_bar(self):
-        """Create filter bar for table"""
-        self.filter_bar = QWidget()
-        layout = QHBoxLayout()
+            self.filter_layout = QHBoxLayout()
 
-        self.filter_input = QLineEdit()
-        self.filter_input.setPlaceholderText("Filter results...")
+            self.open_dialog_button = QPushButton("Filter")
+            self.open_dialog_button.setIcon(QIcon("./assets/dialog-icon.png"))
+            self.open_dialog_button.clicked.connect(self.open_dialog)
+            self.filter_layout.addWidget(self.open_dialog_button)
 
-        self.filter_type = QComboBox()
-        self.filter_type.addItems(["Protein ID", "Description", "GO Terms"])
+            # Style
+            self.setStyleSheet("""
+            QLineEdit {
+                border: 1px solid #D3D3D3;
+                border-radius: 3px;
+                padding: 3px;
+            }
+            QPushButton {
+                background-color: #C0C0C0;
+                color: black;
+                border-radius: 3px;
+                font-weight: bold ;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #7393B3;
+            }
+            QLabel {
+                font-weight: normal;
+            }
+            """)
 
-        layout.addWidget(QLabel("Filter by:"))
-        layout.addWidget(self.filter_type)
-        layout.addWidget(self.filter_input)
-        layout.addWidget(QPushButton("Apply", clicked=self.apply_filters))
-
-        self.filter_bar.setLayout(layout)
-        self.table_group_box.layout().insertWidget(0, self.filter_bar)
 
     def create_menu_bar(self):
-        """Create menu bar"""
-        self.menuBar().clear()
-        # Add menu items here
+            # menu bar creation
+            menu_bar = QMenuBar(self)
+            self.setMenuBar(menu_bar)  
+
+            # style CSS
+            menu_bar.setStyleSheet("""
+                QMenuBar {
+                    background-color: #D7D7D7; 
+                    color: #333333;
+                    font-family: Roboto;
+                    font-weight: bold;
+                    font-size: 12px;               
+                }
+
+                QMenuBar::item {
+                    background-color: transparent; 
+                    padding: 5px 10px; 
+                }
+
+                QMenuBar::item:selected {
+                    background-color: #7393B3; 
+                    border-radius: 4px; 
+                }
+
+                QMenu {
+                    background-color: #D7D7D7; 
+                    color: #333333; 
+                    border: 1px solid #444444; 
+                    margin: 2px;
+                }
+
+                QMenu::item {
+                    background-color: transparent;
+                    padding: 5px 20px; 
+                    font-size: 13px; 
+                }
+
+                QMenu::item:selected {
+                    background-color: #7393B3;
+                    color: #FFD700;
+                }
+
+                QMenu::separator {
+                    height: 2px; 
+                    background-color: #444444;
+                    margin: 4px 10px; 
+                }
+            """)
+
+            # shaddow effect
+            shadow = QGraphicsDropShadowEffect()
+            shadow.setBlurRadius(10) 
+            shadow.setXOffset(0)
+            shadow.setYOffset(3)  
+            shadow.setColor(QColor(0, 0, 0, 80)) 
+
+            menu_bar.setGraphicsEffect(shadow)
+
+            ### --- MENU ITEMS --- ###
+            
+            # Menu File
+            file_menu = menu_bar.addMenu("File")
+            open_action = QAction("Open", self)
+            exit_action = QAction("Exit", self)
+            exit_action.triggered.connect(self.close)
+            file_menu.addAction(open_action)
+            file_menu.addAction(exit_action)
+
+            # Menu Export
+            export_menu = menu_bar.addMenu("Export")
+            export_json_action = QAction("Export to JSON", self)
+            export_json_action.triggered.connect(lambda: export_to_json(self.table))
+            export_menu.addAction(export_json_action)
+
+            export_csv_action = QAction("Export to CSV", self)
+            export_csv_action.triggered.connect(lambda: export_to_csv(self.table))
+            export_menu.addAction(export_csv_action)
+
+            export_tsv_action = QAction("Export to TSV", self)
+            export_tsv_action.triggered.connect(lambda: export_to_tsv(self.table))
+            export_menu.addAction(export_tsv_action)
+
+            # Menu Help
+            help_menu = menu_bar.addMenu("Help")
+            about_action = QAction("About", self)
+            help_menu.addAction(about_action)
+
+            #to-complete
+            # other menu 
+            tools_menu = menu_bar.addMenu("Tools")
+            view_menu = menu_bar.addMenu("View")
+
+            return menu_bar  
+
 
     def create_status_bar(self):
         """Create status bar"""
@@ -259,11 +451,123 @@ class DynamicTableWindow(QMainWindow):
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
 
-    def apply_filters(self):
-        """Apply dynamic filters to table"""
-        column = self.filter_type.currentIndex()
-        text = self.filter_input.text().lower()
-        DataTableManager.apply_filter(self.table, column, text)
+    """******************************Filers*********************************************************************"""
+    def add_filter_field(self):
+        """dynamique filter based on table headers"""
+        filter_row_layout = QHBoxLayout()  
+
+        column_dropdown = QComboBox()
+        column_headers = [self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())]
+        column_dropdown.addItems(column_headers)
+
+        filter_input = QLineEdit()
+        filter_input.setPlaceholderText("Enter filter value...")
+
+        remove_button = QPushButton("Remove")
+        remove_button.setIcon(QIcon("./assets/trash.png"))
+        remove_button.clicked.connect(lambda: self.remove_filter_field(filter_row_layout))
+
+        filter_row_layout.addWidget(QLabel("Column:"))
+        filter_row_layout.addWidget(column_dropdown)
+        filter_row_layout.addWidget(filter_input)
+        filter_row_layout.addWidget(remove_button)
+
+        self.filter_layout.addLayout(filter_row_layout)
+
+        # stocking widget to apply filter after
+        self.filter_fields.append((column_dropdown, filter_input))
+
+        filter_input.textChanged.connect(self.apply_dynamic_filters)
+
+    def remove_filter_field(self, filter_layout):
+        """delete an input of dynamique filter."""
+        # deleting all the widgets of the layout
+        for i in reversed(range(filter_layout.count())):
+            widget = filter_layout.itemAt(i).widget()
+            if widget:
+                widget.setParent(None)  # detaching from the layout=
+                widget.deleteLater()   # Planning the supression
+
+        # Remove the layout itself
+        parent_widget = filter_layout.parentWidget()
+        if parent_widget and isinstance(parent_widget.layout(), QtWidgets.QLayout):
+            parent_layout = parent_widget.layout()
+            parent_layout.removeItem(filter_layout)
+        
+        # Clean dynamic filter list
+        self.filter_fields = [
+            (column_dropdown, filter_input)
+            for column_dropdown, filter_input in self.filter_fields
+            if filter_input and filter_input.parent() is not None
+        ]
+
+
+
+    def apply_dynamic_filters(self):
+        """Applies all dynamic filters to the table."""
+        logic = self.filter_logic_dropdown.currentText()  # 'AND' or 'OR'
+
+        # List to store valid filters
+        valid_filter_fields = []
+
+        # itering all rows in the table
+        for row in range(self.table.rowCount()):
+            row_matches = []
+            
+            for column_dropdown, filter_input in self.filter_fields[:]:  #Iterate over a copy of the list
+                # Check if filter_input still exists and is valid
+                if filter_input and filter_input.isVisible() and filter_input.parent() is not None:
+                    filter_value = filter_input.text().strip().lower()
+                    if not filter_value:
+                        continue
+
+                    column_index = column_dropdown.currentIndex()
+                    item = self.table.item(row, column_index)
+                    row_matches.append(item and filter_value in item.text().strip().lower())
+                else:
+                    # If filter_input is deleted, we remove it from filter_fields
+                    if (column_dropdown, filter_input) in self.filter_fields:
+                        self.filter_fields.remove((column_dropdown, filter_input))
+
+            # Filter logique
+            if logic == "AND":
+                row_visible = all(row_matches) if row_matches else True
+            else:
+                row_visible = any(row_matches) if row_matches else True
+
+            self.table.setRowHidden(row, not row_visible)
+
+        # updating status bar
+        visible_count = sum(not self.table.isRowHidden(row) for row in range(self.table.rowCount()))
+        if visible_count == 0:
+            self.statusBar().showMessage("No results found.")
+        else:
+            self.statusBar().showMessage(f"{visible_count} rows visible.")
+
+
+    def clear_filters(self):
+        """Clears all filters from the table."""
+        for column_dropdown, filter_input in self.filter_fields[:]:
+            if filter_input and filter_input.parent() is not None:
+                filter_input.clear()
+            else:
+                self.filter_fields.remove((column_dropdown, filter_input))
+
+        #display
+        for row in range(self.table.rowCount()):
+            self.table.setRowHidden(row, False)
+
+        # status bar
+        self.statusBar().showMessage("Filters cleared.")
+
+
+    #to review
+    def reset_table_visibility(self):
+        """Reset the visibility of all rows in the table."""
+        for row in range(self.table.rowCount()):
+            self.table.setRowHidden(row, False)
+
+
 
     def create_blast_tab(self, data):
         """Create Blast results tab"""
@@ -376,21 +680,22 @@ class DynamicTableWindow(QMainWindow):
         
         # Check if we're near the end of our data
         model = self.table.model()
-        if not model:
-            return
-            
-        scrollbar = self.table.verticalScrollBar()
-        # If we're more than 80% through the loaded data, request more
-        if scrollbar.value() > scrollbar.maximum() * 0.8:
-            self.request_more_data.emit(model.rowCount())
+        if model:
+            scrollbar = self.table.verticalScrollBar()
+            if scrollbar.value() > scrollbar.maximum() * 0.8:
+                self.request_more_data.emit(model.rowCount())
 
     def create_visible_widgets(self):
-        """Create widgets ONLY for visible rows with ultra-efficient recycling"""
+        """Create widgets only for visible rows with throttling"""
         model = self.table.model()
         if not model:
             return
             
         # Get visible rows
+        from_data_mgr = hasattr(model, "widgets") and hasattr(model, "widget_cells")
+        if not from_data_mgr:
+            return
+        
         visible_rect = self.table.viewport().rect()
         first_visible = self.table.rowAt(visible_rect.top())
         last_visible = self.table.rowAt(visible_rect.bottom())
@@ -398,46 +703,45 @@ class DynamicTableWindow(QMainWindow):
         if first_visible < 0:
             first_visible = 0
         if last_visible < 0:
-            last_visible = min(first_visible + 10, model.rowCount() - 1)
-        
-        # Extreme optimization: process even fewer widgets per frame
-        widgets_created = 0
-        max_widgets_per_frame = 3  # Create only 3 widgets per frame
+            last_visible = min(first_visible + 20, model.rowCount() - 1)
         
         # Update model's visible range
         model.setVisibleRows(first_visible, last_visible)
         
-        # Try to recycle widgets first
-        if hasattr(model, 'recycle_widgets'):
-            model.recycle_widgets(first_visible, last_visible)
+        # Limit the number of widgets to create per call to prevent freezing
+        widgets_created = 0
+        max_widgets_per_call = 10
         
-        # Create only essential widgets in visible area
+        # Create widgets only for visible rows
         for row in range(first_visible, last_visible + 1):
-            if widgets_created >= max_widgets_per_frame:
-                # Delay next widget creation to next frame
-                QTimer.singleShot(1, self.create_visible_widgets)
+            if widgets_created >= max_widgets_per_call:
+                # Schedule another call to continue creating widgets
+                QTimer.singleShot(50, self.create_visible_widgets)
                 return
                 
-            if row >= model.rowCount() or row in model.loaded_rows:
+            if row >= model.rowCount():
                 continue
-                
-            # Mark as processed
-            model.loaded_rows.add(row)
             
-            # Only process most important columns
-            essential_cols = ["Protein ID", "Description"]
-            for col_name in essential_cols:
-                try:
-                    col = model.HEADERS.index(col_name)
-                    # Create only if needed and doesn't exist
-                    if (row, col) in model.widget_cells and (row, col) not in model.widgets:
-                        self.create_widget_for_cell(row, col)
-                        widgets_created += 1
-                except ValueError:
-                    pass
-        
-        # Process pending events to keep UI responsive
-        QApplication.processEvents()
+            # REMOVED: Don't check loaded_rows when deciding if widgets should be created
+            # if row in model.loaded_rows:
+            #     continue  # Skip already processed rows
+                
+            # Instead, track which cells have been processed this scroll cycle
+            processed_this_time = False
+            
+            for col in range(model.columnCount()):
+                # Only process widget cells
+                if (row, col) in model.widget_cells and (row, col) not in model.widgets:
+                    self.create_widget_for_cell(row, col)
+                    widgets_created += 1
+                    processed_this_time = True
+                    
+                    if widgets_created >= max_widgets_per_call:
+                        break
+            
+            # Only mark as loaded if we actually processed it
+            if processed_this_time:
+                model.loaded_rows.add(row)
 
     def on_request_more_data(self, current_count):
         """Request more data to be loaded when scrolling near the end"""
@@ -472,14 +776,14 @@ class DynamicTableWindow(QMainWindow):
             # Already loading - do nothing to avoid overwhelming the system
             pass
 
-    def create_pagination_controls(self):
-        """Create pagination controls for navigating through large datasets"""
+    def create_pagination_controls(self, parent_layout=None):
+        """Create pagination controls for navigating through large datasets with centered alignment"""
         try:
-            # If old pagination widget exists but is invalid, clean it up safely
+            # Clean up old pagination widget if it exists
             if hasattr(self, 'pagination_widget') and self.pagination_widget is not None:
                 try:
                     if self.pagination_widget.parent():
-                        self.pagination_container_layout.removeWidget(self.pagination_widget)
+                        self.pagination_widget.parent().layout().removeWidget(self.pagination_widget)
                     self.pagination_widget.deleteLater()
                 except (RuntimeError, AttributeError) as e:
                     logging.debug(f"Cleanup of old pagination widget: {str(e)}")
@@ -493,6 +797,7 @@ class DynamicTableWindow(QMainWindow):
                     border: 1px solid #ccc;
                     border-radius: 4px;
                     padding: 4px;
+                    margin-top: 4px;
                 }
                 QPushButton {
                     min-width: 60px;
@@ -500,54 +805,43 @@ class DynamicTableWindow(QMainWindow):
                 }
             """)
             
-            # Create layout
+            # Create inner layout for pagination controls
             pagination_layout = QHBoxLayout(self.pagination_widget)
             pagination_layout.setContentsMargins(4, 4, 4, 4)
             pagination_layout.setSpacing(4)
             
-            # Create all the necessary pagination controls
+            # Create pagination controls
             self.prev_button = QPushButton("< Prev")
             self.page_info_label = QLabel("Page 1/1")
             self.next_button = QPushButton("Next >")
-            self.page_jump = QSpinBox()
-            self.page_jump.setMinimum(1)
-            self.page_jump.setMaximum(1)
-            self.page_jump_button = QPushButton("Go")
             self.page_size_combo = QComboBox()
             self.page_size_combo.addItems(["100", "200", "500"])
             self.page_size_combo.setCurrentIndex(0)  # Default to 100
             
-            # Add debug button
-            self.debug_button = QPushButton("Debug")
-            self.debug_button.setStyleSheet("background-color: #ffcc66;")
-            self.debug_button.clicked.connect(self.debug_pagination)
-            
-            # Create debug tools
-            debug_tools = self.create_debug_tools()
-            
-            # Add widgets to layout
+            # Add widgets to layout with auto-centering
+            pagination_layout.addStretch(1)  # Add stretching space on the left
             pagination_layout.addWidget(QLabel("Items per page:"))
             pagination_layout.addWidget(self.page_size_combo)
             pagination_layout.addWidget(self.prev_button)
             pagination_layout.addWidget(self.page_info_label)
             pagination_layout.addWidget(self.next_button)
-            pagination_layout.addWidget(QLabel("Jump to:"))
-            pagination_layout.addWidget(self.page_jump)
-            pagination_layout.addWidget(self.page_jump_button)
-            pagination_layout.addWidget(self.debug_button)  # Add debug button
-            pagination_layout.addWidget(debug_tools)
-            pagination_layout.addStretch()
+            pagination_layout.addStretch(1)  # Add stretching space on the right
             
-            # Add to dedicated pagination container layout
-            self.pagination_container_layout.addWidget(self.pagination_widget)
+            # Add to parent layout if provided, with centering alignment
+            if parent_layout:
+                # Create a container wrapper for horizontal centering
+                container = QHBoxLayout()
+                container.addStretch(1)
+                container.addWidget(self.pagination_widget)
+                container.addStretch(1)
+                parent_layout.addLayout(container)
             
-            # Connect signals with try/except blocks
+            # Connect signals
             self.prev_button.clicked.connect(self.on_prev_page)
             self.next_button.clicked.connect(self.on_next_page)
-            self.page_jump_button.clicked.connect(self.on_page_jump)
             self.page_size_combo.currentIndexChanged.connect(self.on_page_size_changed)
             
-            # Make pagination widget persist even during cleanup
+            # Widget persistence settings
             self.pagination_widget.setAttribute(Qt.WA_DeleteOnClose, False)
             
             # Hide until data is loaded
@@ -558,7 +852,7 @@ class DynamicTableWindow(QMainWindow):
             logging.error(f"Failed to create pagination controls: {str(e)}")
             traceback.print_exc()
             return False
-
+        
     def on_prev_page(self):
         """Go to the previous page"""
         model = self.table.model()
@@ -693,56 +987,105 @@ class DynamicTableWindow(QMainWindow):
                     if widgets_created >= max_widgets_per_call:
                         break
 
-    def create_widget_for_cell(self, row, col):
-        """Create a widget for the specified cell if needed"""
-        model = self.table.model()
-        if not model or row >= len(model._data):
-            return
-            
-        row_data = model._data[row]
-        if "widgets" not in row_data:
-            return
-            
-        widgets_data = row_data["widgets"]
-        header = model.HEADERS[col]
-        
-        # Find matching widget info
-        matching_key = None
-        for key in widgets_data.keys():
-            if key.lower() == header.lower():
-                matching_key = key
-                break
-                
-        if not matching_key:
-            return
-            
-        widget_info = widgets_data[matching_key]
-        widget_type = widget_info.get("type")
-        widget_data = widget_info.get("data")
-        
-        if widget_type and widget_data is not None:
-            try:
-                from utils.table_manager import DataTableManager
-                widget = DataTableManager.create_widget(widget_type, widget_data, model.go_definitions)
-                if widget:
-                    model.widgets[(row, col)] = widget
-                    self.table.setIndexWidget(model.index(row, col), widget)
-            except Exception as e:
-                logging.error(f"Error creating widget for cell ({row}, {col}): {str(e)}")
-
-    def on_scroll_change(self, value):
-        """Handle scroll events to load widgets for newly visible rows"""
-        self.create_visible_widgets()
-        
-        # Check if we're near the end of our data
+    def debug_widget_state(self):
+        """Debug widget state for current page"""
         model = self.table.model()
         if not model:
             return
             
-        scrollbar = self.table.verticalScrollBar()
-        # If we're more than 80% through the loaded data, request more
-        if scrollbar.value() > scrollbar.maximum() * 0.8:
-            self.request_more_data.emit(model.rowCount())
+        page = model.current_page
+        
+        # Get debugging info
+        debug_info = [
+            f"Current Page: {page+1}",
+            f"Widget Count: {len(model.widgets)}",
+            f"Widget Cells Count: {len(model.widget_cells)}"
+        ]
+        
+        # Sample some widgets
+        if model.widgets:
+            debug_info.append("\nSample Widgets:")
+            count = 0
+            for (row, col), widget in list(model.widgets.items())[:5]:
+                # Get widget type and data
+                widget_type = "Unknown"
+                widget_data = "Unknown"
+                
+                page_row = row % model.PAGE_SIZE
+                if page in model._loaded_data and page_row < len(model._loaded_data[page]):
+                    row_data = model._loaded_data[page][page_row]
+                    if "widgets" in row_data:
+                        for key, info in row_data["widgets"].items():
+                            if key.lower() == model.HEADERS[col].lower():
+                                widget_type = info.get("type", "Unknown")
+                                widget_data = info.get("data", "Unknown")
+                                break
+                                
+                debug_info.append(f"  Widget({row},{col}): Type={widget_type}, Data={widget_data}")
+                count += 1
+                if count >= 5:
+                    break
+        
+        # Log the debug info
+        for line in debug_info:
+            logging.debug(line)
+            
+        # Return as a string for potential display
+        return "\n".join(debug_info)
+    
+    def create_widget_for_cell(self, row, col):
+        """Create a widget for a specific cell with proper page awareness"""
+        try:
+            model = self.table.model()
+            page = model.current_page
+            page_size = model.PAGE_SIZE
+            
+            # Get page-relative row index
+            page_row = row % page_size
+            
+            logging.debug(f"Creating widget for cell ({row},{col}) - page row {page_row} on page {page+1}")
+            
+            if page in model._loaded_data and page_row < len(model._loaded_data[page]):
+                row_data = model._loaded_data[page][page_row]
+                
+                if "widgets" in row_data:
+                    header = model.HEADERS[col]
+                    header_key = header.lower()
+                    
+                    for key, widget_info in row_data["widgets"].items():
+                        if key.lower() == header_key:
+                            widget_type = widget_info.get("type")
+                            widget_data = widget_info.get("data")
+                            
+                            if widget_type and widget_data is not None:
+                                widget = DataTableManager.create_widget(widget_type, widget_data, model.go_definitions)
+                                if widget:
+                                    model.widgets[(row, col)] = widget
+                                    logging.debug(f"Successfully created {widget_type} widget for row {row} with data: {widget_data}")
+                                    return widget
+                                else:
+                                    # Important: If widget creation failed, remove from widget_cells
+                                    if (row, col) in model.widget_cells:
+                                        model.widget_cells.remove((row, col))
+                                    logging.warning(f"Failed to create widget for cell ({row},{col})")
+        except Exception as e:
+            logging.error(f"Error creating widget for cell ({row},{col}): {str(e)}")
+            traceback.print_exc()
+        
+        return None
+
+    """     def on_scroll_change(self, value):
+            self.create_visible_widgets()
+            
+            # Check if we're near the end of our data
+            model = self.table.model()
+            if not model:
+                return
+                
+            scrollbar = self.table.verticalScrollBar()
+            # If we're more than 80% through the loaded data, request more
+            if scrollbar.value() > scrollbar.maximum() * 0.8:
+                self.request_more_data.emit(model.rowCount()) """
 
     def on_data_batch_loaded(self, batch, start_index, total_count):
         """Handle loaded data batch"""
@@ -826,21 +1169,17 @@ class DynamicTableWindow(QMainWindow):
     def reveal_pagination(self):
         """Force reveal pagination controls and show debugging info"""
         try:
-            # First make sure the container is valid
-            if not hasattr(self, 'pagination_container') or not self.is_widget_valid(self.pagination_container):
-                logging.warning("Pagination container is missing or invalid - recreating UI components")
-                self.init_ui()  # Recreate the entire UI as a last resort
-                return
-                
             # Check if pagination widget exists and is valid
             has_valid_widget = (hasattr(self, 'pagination_widget') and 
-                           self.pagination_widget is not None and 
-                           self.is_widget_valid(self.pagination_widget))
+                        self.pagination_widget is not None and 
+                        self.is_widget_valid(self.pagination_widget))
             
             # If widget doesn't exist or is invalid, create a new one
             if not has_valid_widget:
                 logging.warning("No pagination widget exists or widget was deleted - creating new one")
-                success = self.create_pagination_controls()
+                # Get the table group box's layout to add pagination to
+                layout = self.table_group_box.layout()
+                success = self.create_pagination_controls(layout)
                 if not success:
                     logging.error("Failed to create pagination controls")
                     QMessageBox.warning(self, "Error", "Could not create pagination controls")
@@ -852,12 +1191,8 @@ class DynamicTableWindow(QMainWindow):
                     self.pagination_widget.setVisible(True)
                     self.pagination_widget.show()  # Force show
                     self.pagination_widget.raise_()  # Bring to front
-                    
-                    # Debug info
-                    # ...existing code...
                 except RuntimeError as e:
                     logging.error(f"Widget validation failed: {str(e)}")
-                    
                     # Create a new temporary pagination as a last resort
                     self.emergency_create_pagination()
         except Exception as e:
@@ -906,82 +1241,44 @@ class DynamicTableWindow(QMainWindow):
             # Highlight to user that we're on the last page
             QMessageBox.information(self, "Navigation", f"Showing last page ({max_page+1})")
 
-    def navigate_to_page(self, page_number):
-        """Navigate to the specified page with improved view update"""
-        try:
-            model = self.table.model()
-            if not model:
-                return False
-                
-            # Get pagination values
-            total_pages = max(1, (model._total_rows + model.PAGE_SIZE - 1) // model.PAGE_SIZE)
-            
-            # Ensure page number is within bounds
-            page_number = max(1, min(page_number, total_pages))
-            
-            # Convert to 0-based for internal use
-            page_idx = page_number - 1
-            
-            logging.debug(f"Navigating to page {page_number}/{total_pages}")
-            
-            # Debug: Log first few items before page change
-            self._debug_log_current_page_data("Before page change")
-            
-            # FORCE COMPLETE MODEL RESET
-            model.beginResetModel()
-            
-            # Remove page from cache to force reload with fresh data
-            if page_idx in model._loaded_data:
-                del model._loaded_data[page_idx]
-                
-            # Set current page BEFORE loading data
-            model.current_page = page_idx
-            
-            # Clear all widgets to avoid stale data
-            old_widgets = model.widgets.copy() if hasattr(model, 'widgets') else {}
-            model.widgets = {}
-            model.loaded_rows = set() if hasattr(model, 'loaded_rows') else set()
-            model.widget_cells = set() if hasattr(model, 'widget_cells') else set()
-            
-            # Load data for the new page explicitly
-            model._load_page(page_idx)
-            
-            # Complete the model reset
-            model.endResetModel()
-            
-            # Clean up old widgets safely after reset completes
-            for key, widget in old_widgets.items():
-                try:
-                    if widget:
-                        widget.setParent(None)
-                        widget.deleteLater()
-                except Exception as e:
-                    pass
-            
-            # Debug: Log data after page change to confirm correct data
-            self._debug_log_current_page_data("After page change")
-            
-            # FORCE VIEW TO UPDATE - This is crucial!
-            self.table.setModel(None)  # Remove model temporarily
-            self.table.setModel(model)  # Re-set model to force complete refresh
-            
-            # Force the view to refresh completely
-            self.table.viewport().update()
-            self.table.reset()  # Reset view to ensure it repaints completely
-            
-            # Recreate all visible widgets
-            QTimer.singleShot(50, self.recreate_all_visible_widgets)
-            QTimer.singleShot(100, self.update_pagination_info)
-            
-            # Message in status bar
-            self.status_bar.showMessage(f"Navigated to page {page_number}/{total_pages}")
-            
-            return True
-            
-        except Exception as e:
-            logging.error(f"Error navigating to page {page_number}: {str(e)}")
-            traceback.print_exc()
-            return False
+
+    def navigate_to_page(self, page_num):
+        """Navigate to the specified page"""
+        model = self.table.model()
+        if not model:
+            return
+        
+        # Before page change debugging
+        logging.debug(f"=== BEFORE page change (Page {model.current_page + 1}) ===")
+        logging.debug(f"Widget count before: {len(model.widgets)}")
+        logging.debug(f"Widget cells before: {len(model.widget_cells)}")
+        
+        # Update page number in model 
+        model.current_page = page_num
+        
+        # Load the page data
+        model._load_page(page_num)
+        
+        # Clear and recreate widgets
+        logging.debug("Clearing widget cache...")
+        model.clear_widget_cache()
+        
+        # Log after clearing
+        logging.debug(f"Widget count after clearing: {len(model.widgets)}")
+        
+        # Recreate widgets
+        logging.debug("Recreating widgets...")
+        self.recreate_all_visible_widgets()
+        
+        # After page change debugging
+        logging.debug(f"=== AFTER page change (Page {page_num + 1}) ===")
+        logging.debug(f"Widget count after: {len(model.widgets)}")
+        logging.debug(f"Widget cells after: {len(model.widget_cells)}")
+        
+        # Update pagination and UI
+        self.update_pagination_info()
+        QTimer.singleShot(10, self.recreate_all_visible_widgets)  # Extra recreation call
+        self.table.viewport().update()
 
     def recreate_all_visible_widgets(self):
         """Force recreate all visible widgets after page change"""
@@ -1008,35 +1305,193 @@ class DynamicTableWindow(QMainWindow):
             # Clear widget cells set before rebuilding it
             model.widget_cells = set()
             
-            # Recreate widget cells mapping
+            # Recreate widget cells mapping - PRIORITIZE PFAMs and other special widgets
+            priority_headers = ["PFAMs", "GO", "Results", "InterPro", "Classification"] 
+            regular_headers = [h for h in model.HEADERS if h not in priority_headers]
+            all_headers_ordered = priority_headers + regular_headers
+            
+            # First pass: mark all cells that need widgets
             for row in range(len(page_data)):
                 row_data = page_data[row]
                 if "widgets" in row_data:
                     for col, header in enumerate(model.HEADERS):
-                        # Look for matching widget info (case-insensitive)
                         header_key = header.lower()
                         for key in row_data["widgets"].keys():
                             if key.lower() == header_key:
                                 widget_info = row_data["widgets"][key]
                                 if widget_info.get("type") != "text":
-                                    # This cell needs a widget
                                     model.widget_cells.add((row, col))
                                     break
             
-            # Create widgets only for visible cells
-            for row in range(first_visible, last_visible + 1):
-                if row >= len(page_data):
+            # Second pass: create widgets in priority order
+            for header in all_headers_ordered:
+                try:
+                    col = model.HEADERS.index(header)
+                    for row in range(first_visible, last_visible + 1):
+                        if row >= len(page_data):
+                            continue
+                        
+                        if (row, col) in model.widget_cells:
+                            self.create_widget_for_cell(row, col)
+                except ValueError:
+                    # Header not found
                     continue
-                    
-                for col in range(model.columnCount()):
-                    if (row, col) in model.widget_cells:
-                        self.create_widget_for_cell(row, col)
             
             # Force the view to update
             self.table.viewport().update()
             
         except Exception as e:
             logging.error(f"Error recreating widgets: {str(e)}")
+            traceback.print_exc()
+
+    def _force_page_reload(self):
+        """Force reload and redisplay of current page"""
+        model = self.table.model()
+        if not model:
+            return
+            
+        # Get current page
+        page = model.current_page
+        
+        # Remove from cache
+        if page in model._loaded_data:
+            del model._loaded_data[page]
+            
+        # Clear widgets
+        model.widgets = {}
+        model.loaded_rows = set()
+        
+        # Reload data
+        model._load_page(page)
+        
+        # Reset model to force redraw
+        model.beginResetModel()
+        model.endResetModel()
+        
+        # Force update
+        self.table.viewport().update()
+        
+        # Debug output
+        logging.debug(f"Forced reload of page {page+1}")
+
+    def _verify_page_data(self, expected_page=None):
+        """Verify that correct page data is actually displayed"""
+        model = self.table.model()
+        if not model:
+            return False
+        
+        # Get expected page
+        page = expected_page if expected_page is not None else model.current_page
+        
+        # Check if data loaded
+        if page not in model._loaded_data:
+            logging.warning(f"Page {page+1} data not loaded!")
+            return False
+        
+        # Log first few items for verification
+        page_data = model._loaded_data[page]
+        
+        logging.debug(f"Verifying page {page+1} data:")
+        for i in range(min(3, len(page_data))):
+            item = page_data[i]
+            protein_id = item.get("display", {}).get("Protein ID", "N/A")
+            debug_id = item.get("display", {}).get("_debug_id", "No ID")
+            logging.debug(f"Item {i}: ID={protein_id}, Debug ID={debug_id}")
+        
+        # Force view update if not showing correct data
+        if model.rowCount() < 1 and len(page_data) > 0:
+            logging.warning("Model reports zero rows but data exists! Forcing update.")
+            model.beginResetModel()
+            model.endResetModel()
+            self.table.viewport().update()
+            return False
+            
+        return True
+
+    def emergency_page_fix(self):
+        """Emergency fix for page display issues without causing loops"""
+        model = self.table.model()
+        if not model:
+            return
+        
+        # Get current page
+        page = model.current_page
+        
+        # Use a static flag to prevent recursive calls
+        if hasattr(self, '_currently_fixing') and self._currently_fixing:
+            logging.warning("Already fixing page - preventing recursive calls")
+            return
+            
+        try:
+            # Set flag to prevent recursion
+            self._currently_fixing = True
+            
+            # Force clean reload
+            if page in model._loaded_data:
+                page_data = model._loaded_data[page].copy()  # Make a copy
+                del model._loaded_data[page]  # Delete from cache
+                
+                # Reset model
+                model.beginResetModel()
+                model._loaded_data[page] = page_data  # Restore the data
+                model.endResetModel()
+                
+                # Force update
+                self.table.viewport().update()
+                self._debug_log_current_page_data("After emergency fix")
+                
+                logging.debug("Emergency page fix applied")
+                
+                # Schedule additional updates
+                QTimer.singleShot(10, self.table.viewport().update)
+                QTimer.singleShot(10, self.update_pagination_info)
+                
+        finally:
+            # Always clear flag when done
+            self._currently_fixing = False
+
+    def _verify_page_data_matches(self, page_idx):
+        """Verify that the displayed page data matches the loaded data"""
+        model = self.table.model()
+        if not model or page_idx not in model._loaded_data:
+            return False
+        
+        # Compare cached data with what's being shown
+        page_data = model._loaded_data[page_idx]
+        
+        # Check first few visible rows
+
+
+        # Check first few visible rows
+        visible_rect = self.table.viewport().rect()
+        first_visible = self.table.rowAt(visible_rect.top())
+        
+        if first_visible < 0:
+            first_visible = 0
+            
+        # Compare a sample row
+        if first_visible < len(page_data):
+            cached_item = page_data[first_visible]
+            displayed_item = None
+            
+            # Get the displayed data for this row
+            try:
+                protein_id_idx = model.HEADERS.index("Protein ID")
+                displayed_id = model.data(model.index(first_visible, protein_id_idx), Qt.DisplayRole)
+                
+                # Get expected protein ID from cached data
+                expected_id = cached_item.get("display", {}).get("Protein ID", "N/A")
+                
+                if displayed_id != expected_id:
+                    logging.warning(f"Data mismatch! Row {first_visible}: Displayed={displayed_id}, Expected={expected_id}")
+                    
+                    # Attempt emergency fix - force data synchronization
+                    self.emergency_page_fix()
+                    return False
+            except Exception as e:
+                logging.error(f"Error verifying data match: {str(e)}")
+        
+        return True
 
     def _debug_log_current_page_data(self, message):
         """Log the first few items from the current page for debugging"""
@@ -1110,6 +1565,9 @@ class DynamicTableWindow(QMainWindow):
         # Bouton pour afficher les cellules actives
         cells_btn = QPushButton("Show Cell Info")
         cells_btn.clicked.connect(self.debug_show_cell_info)
+        widgets_btn = QPushButton("Debug Widgets")
+        widgets_btn.clicked.connect(self.show_widget_debug)
+        debug_layout.addWidget(widgets_btn)
         
         # Ajouter les boutons
         debug_layout.addWidget(compare_btn)
@@ -1117,6 +1575,11 @@ class DynamicTableWindow(QMainWindow):
         debug_layout.addWidget(cells_btn)
         
         return debug_panel
+    
+    def show_widget_debug(self):
+        """Show widget debugging information"""
+        debug_info = self.debug_widget_state()
+        QMessageBox.information(self, "Widget Debug", debug_info)
 
     def debug_compare_pages(self):
         """Compare current page data with next page data"""

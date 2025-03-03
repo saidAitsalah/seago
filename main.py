@@ -35,6 +35,7 @@ class AppSignals(QObject):
     error_occurred = Signal(str)
     task_cancelled = Signal()
     data_loaded = Signal(list)
+    
 class AppController(QObject):
     def __init__(self, app):
         super().__init__()
@@ -130,7 +131,7 @@ class AppController(QObject):
                 if hasattr(self.loader_thread, 'total_count') and self.loader_thread.total_count > 0:
                     model._total_rows = self.loader_thread.total_count
             
-            # Process events less frequently - just once per batch
+            # Process events less frequently - just once per batch (optimisation)
             QApplication.processEvents()
             
             if is_last_batch:
@@ -153,7 +154,6 @@ class AppController(QObject):
             self._show_loading_state(False)
             if not data:
                 logging.warning("Received empty data in on_data_loaded")
-        # Vérifiez le format des données
             if data and isinstance(data, list) and len(data) > 0:
                 # Pass the actual file path that was used to load the data
                 logging.debug(f"First item keys: {data[0].keys()}")
@@ -170,7 +170,7 @@ class AppController(QObject):
             self.signals.error_occurred.emit(str(e))
 
     async def process_data_in_batches(self, data):
-        batch_size = 10  # Adjust batch size as needed
+        batch_size = 10  # Adjusting batch size as needed
         total_items = len(data)
         for start in range(0, total_items, batch_size):
             end = min(start + batch_size, total_items)
@@ -182,11 +182,8 @@ class AppController(QObject):
             await asyncio.sleep(0)  # Yield control to the event loop
 
     async def process_batch(self, batch):
-        # Implement batch processing logic here
-        # For example, update the UI with the batch data
         print(f"Processing batch of size {len(batch)}")
         for item in batch:
-            # Process each item in the batch
             print("Processing item:", item)  # Log the item being processed
             if self.results_widget:
                 table = self.results_widget.table
@@ -203,6 +200,15 @@ class AppController(QObject):
 
 
     async def _show_async_file_dialog(self) -> Optional[str]:
+        """
+        Asynchronously shows a file dialog and returns the selected file path.
+
+        This method creates a QFileDialog, and connects its accepted and rejected signals to an asyncio.Future object.
+        The dialog is shown, and the method waits for the user's selection or cancellation.
+
+        Returns:
+            Optional[str]: The selected file path if a file is selected, otherwise None.
+        """
         dialog = QFileDialog(self.main_window)
         dialog.setWindowModality(Qt.ApplicationModal)
         future = asyncio.Future()
