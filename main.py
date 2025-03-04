@@ -25,6 +25,7 @@ import ijson
 import traceback
 import json
 from utils.BatchJsonLoaderThread import BatchJsonLoaderThread
+from PySide6.QtGui import QIcon
 
 
 # Configure logging
@@ -35,7 +36,7 @@ class AppSignals(QObject):
     error_occurred = Signal(str)
     task_cancelled = Signal()
     data_loaded = Signal(list)
-    
+
 class AppController(QObject):
     def __init__(self, app):
         super().__init__()
@@ -50,8 +51,13 @@ class AppController(QObject):
         self.data = []
 
     def _setup_ui(self):
-        self.main_window.setWindowTitle("SEAGO")
+        
+        self.main_window.setWindowTitle("SeaGO")
         self.main_window.resize(1200, 900)
+        
+        icon = QIcon("./assets/image.png")
+        self.main_window.setWindowIcon(icon)
+        
         self.progress_bar = QProgressBar()
         self.progress_bar.hide()
         self.cancel_btn = QPushButton("Annuler")

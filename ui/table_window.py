@@ -359,13 +359,53 @@ class DynamicTableWindow(QMainWindow):
             return menu_bar  
 
 
+    def update_time(self):
+        """Update the clock in the status bar."""
+        from datetime import datetime
+        current_time = datetime.now().strftime("%H:%M:%S")
+        self.clock_label.setText(f"Time: {current_time}")
+
+
     def create_status_bar(self):
-        """Create status bar"""
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.progress_bar = QProgressBar()
-        self.status_bar.addPermanentWidget(self.progress_bar)
-        self.progress_bar.hide()
+            self.status_bar = QStatusBar()
+            self.setStatusBar(self.status_bar)
+
+            # Row count label
+            #self.row_count_label = QLabel(self.row_count_label)
+            #self.status_bar.addPermanentWidget(self.row_count_label)
+
+            # Clock
+            self.clock_label = QLabel()
+            self.status_bar.addPermanentWidget(self.clock_label)
+            self.update_time()  # Initial time update
+            self.timer = QTimer(self)
+            self.timer.timeout.connect(self.update_time)
+            self.timer.start(1000)
+
+            # Progress bar
+            self.progress_bar = QProgressBar()
+            self.progress_bar.setMaximumWidth(200)
+            self.progress_bar.setVisible(False)
+            self.status_bar.addPermanentWidget(self.progress_bar)
+            self.progress_bar.hide()
+
+
+            # Status bar style
+            self.status_bar.setStyleSheet("""
+                QStatusBar {
+                    background-color: #0B4F6C;
+                    color: #FFFFFF;
+                    font-weight: bold;
+                    font-size: 12px;
+                    border-top: 2px solid #86BBD8;
+                }
+                QLabel {
+                    color: #93FF96;
+                    font-weight: bold;
+                    font-size: 12px;
+                }
+            """)
+
 
     def create_tab_system(self):
         """Initialize tab system with splitter"""

@@ -206,8 +206,15 @@ class DataTableManager:
                 tags.append(("blast", str(len(row_data["blast_hits"]))))
             if row_data.get("InterproScan_annotation"):
                 tags.append(("interpro", str(len(row_data["InterproScan_annotation"]))))
+            # Add GO tag if GO terms exist
+            go_terms = eggnog.get("GOs", "")
+            if go_terms and go_terms.strip():  # Check if non-empty
+                terms_list = go_terms.split(',')
+                terms_count = len([t for t in terms_list if t.strip()])  # Count non-empty terms
+                if terms_count > 0:
+                    tags.append(("go", f"{terms_count}"))    
             if not tags:
-                tags.append(("default", "N/A"))
+                tags.append(("default", "N/A"))        
 
             # Original display data mapping
             display_data = {
@@ -841,6 +848,15 @@ class DataTableManager:
             style = DataTableManager.STYLES["tag"].get(tag_type, DataTableManager.STYLES["tag"]["default"])
             label.setStyleSheet(f"{style} border-radius: 5px; padding: 4px; font-weight: bold;")
             layout.addWidget(label)
+
+             # tooltip 
+            if tag_type == "blast":
+                label.setToolTip("Blast results (alignement avec les bases de données).")
+            elif tag_type == "interpro":
+                label.setToolTip("InterPro results (functional classification).")
+            else:
+                label.setToolTip("GO ontologie results.")
+
 
         widget.setMinimumHeight(30)  # Ensure widget has adequate minimum height
         return widget
