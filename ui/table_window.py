@@ -62,14 +62,18 @@ class DynamicTableWindow(QMainWindow):
         self.setCentralWidget(self.main_widget)
         self.main_layout = QVBoxLayout(self.main_widget)
 
-        """     # Reserve space for pagination at the bottom
-                self.pagination_container = QWidget()
-                self.pagination_container_layout = QVBoxLayout(self.pagination_container)
-                self.pagination_container_layout.setContentsMargins(0, 0, 0, 0)
-                self.pagination_container.setMinimumHeight(60)  # Reserve space """
-        self.create_filter_bar()
+            # Create filter layout FIRST - before trying to use it
+        self.filter_layout = QHBoxLayout()
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("Filtrer toutes les colonnes...")
+        self.filter_layout.addWidget(self.filter_edit)
 
+        """     # Reserve space for pagination at the bottom """
+        
         self.create_main_table()
+
+        self.complete_filter_setup()
+
         self.create_menu_bar()
         self.create_tab_system()
         self.create_status_bar()
@@ -96,6 +100,7 @@ class DynamicTableWindow(QMainWindow):
         self.table.verticalScrollBar().valueChanged.connect(self.on_scroll_change)
         
         # Show pagination debug info in status bar
+        self.status_bar.showMessage("Press F3 to force refresh filter if results don't update correctly")
         self.status_bar.showMessage("Press F5 to reveal pagination controls if they're hidden")
 
     def _check_memory_usage(self):
@@ -113,6 +118,410 @@ class DynamicTableWindow(QMainWindow):
             import gc
             gc.collect()
 
+    def force_view_refresh_after_filtering(self):
+        # Reset proxy model completely
+        self.proxy_model.beginResetModel()
+        self.proxy_model.endResetModel()
+        
+        # Force table view to update
+        self.table.reset()
+        self.table.viewport().update()
+        
+        # Make sure table scrolls to top to show filtered results
+        self.table.scrollToTop()
+    
+    def force_complete_view_update(self):
+        """Force a complete view update after filtering"""
+        # Store current scroll position
+        scroll_bar = self.table.verticalScrollBar()
+        scroll_position = scroll_bar.value()
+        
+        # Get the model and handle different model types
+        model = self.table.model()
+        
+        # Handle different types of models
+        if hasattr(model, 'sourceModel'):
+            # This is a proxy model - get the source model
+            source_model = model.sourceModel()
+            if hasattr(source_model, 'layoutChanged'):
+                source_model.layoutChanged.emit()
+        else:
+            # This is a direct model (VirtualTableModel)
+            source_model = model
+            if hasattr(source_model, 'layoutChanged'):
+                source_model.layoutChanged.emit()
+        
+        # Reset proxy model if we have one
+        if hasattr(self, 'proxy_model'):
+            self.proxy_model.beginResetModel()
+            self.proxy_model.endResetModel()   
+        # Reset page to 0 when filtering
+        if hasattr(self.model, 'setPage'):
+            self.model.setPage(0)         
+        # Force complete model and view reset
+        self.table.reset()
+        
+        # Update all layers of the view
+        self.table.viewport().update()
+        self.table.repaint()
+        
+        # Restore scroll position if needed
+        scroll_bar.setValue(0)  # Always scroll to top when filtering
+        
+        # Immediately update row count in status bar
+        self.check_filter_status(self.filter_edit.text())    
+
+    def test_specific_row(self):
+        """Force test filter on specific rows"""
+        model = self.table.model()
+        filter_text = "96"  # Hard-coded test filter
+        
+        print("\n===DIRECT FILTER TEST===")
+        row = 0  # Test the first row
+        
+        # Test if filterAcceptsRow exists and call it directly
+        if hasattr(model, 'filterAcceptsRow'):
+            print(f"Calling filterAcceptsRow directly on row {row}...")
+            result = model.filterAcceptsRow(row, QModelIndex())
+            print(f"Direct result: {result}")
+            
+            # If it has a sourceModel, check the data
+            if hasattr(model, 'sourceModel'):
+                source_model = model.sourceModel()
+                if hasattr(source_model, '_loaded_data'):
+                    page = row // source_model.PAGE_SIZE
+                    row_in_page = row % source_model.PAGE_SIZE
+                    if page in source_model._loaded_data:
+                        row_data = source_model._loaded_data[page][row_in_page]
+                        print(f"Data for row {row}: {row_data.get('display', {}).get('Protein ID', 'N/A')}")
+        else:
+            print("Model has no filterAcceptsRow method!")
+
+    def complete_filter_setup(self):
+        """Connect filter to the table model after both exist"""
+        from model.data_model import CustomFilterProxyModel
+        
+        # Create ONE proxy model and store it as instance variable
+        self.proxy_model = CustomFilterProxyModel(self,identifier="table_filter")
+        self.proxy_model.setSourceModel(self.model)
+        
+        # Set proxy model on table
+        self.table.setModel(self.proxy_model)
+
+        self.filter_edit.textChanged.connect(self.on_filter_text_changed)
+
+        print(f"TABLE MODEL IS: {type(self.table.model()).__name__}")
+        print(f"PROXY MODEL IS: {type(self.proxy_model).__name__}")
+        print(f"SOURCE MODEL IS: {type(self.model).__name__}")
+        
+        # Add a clear button to the filter box
+        self.filter_edit.setClearButtonEnabled(True)
+        
+        # Add a delayed update to ensure UI refreshes properly
+        def delayed_update():
+            # Force complete refresh of the view
+            self.table.viewport().update()
+            
+            # Force layout update
+            self.table.updateGeometry()
+            
+            current_filter = self.filter_edit.text()
+            if current_filter:
+                logging.debug(f"Applying filter: '{current_filter}' - refreshing view")
+                # Verify status on first few rows
+                self.check_filter_status(current_filter)
+            
+            # Scroll to top to make filtered results visible
+            self.table.scrollToTop()
+        
+        self.filter_timer = QTimer(self)
+        self.filter_timer.setSingleShot(True)
+        self.filter_timer.timeout.connect(delayed_update)
+        
+    def on_filter_text_changed(self, text):
+            # Apply filter
+
+            self.verify_model_chain() 
+            self.proxy_model.setFilterText(text)
+
+            self.test_filter_directly()  # ADD THIS LINE
+
+
+            self.debug_filter_counts(text)
+
+            
+            # Force view update
+            self.force_complete_view_update()
+        
+    def debug_filter_counts(self, filter_text):
+        """Debug helper to manually check filter counts"""
+        model = self.table.model()
+        
+        # Check if this is a proxy model or direct model
+        if hasattr(model, 'sourceModel'):
+            # This is a proxy model
+            source = model.sourceModel()
+        else:
+            # This is a direct model - use it directly
+            source = model
+        
+        # Manually check filtered count
+        matched = 0
+        total = source._total_rows
+        
+        # Use appropriate filtering method based on model type
+        if hasattr(model, 'filterAcceptsRow'):
+            # For proxy models
+            for i in range(total):
+                if model.filterAcceptsRow(i, QModelIndex()):
+                    matched += 1
+        else:
+            # For direct models with filter function
+            if hasattr(model, 'filter_function') and model.filter_function:
+                for i in range(total):
+                    if model.filter_function(i, QModelIndex()):
+                        matched += 1
+            else:
+                # No filtering
+                matched = total
+        
+        logging.debug(f"Manual count: Filter '{filter_text}' matches {matched} of {total} rows")
+        
+        # Report first 3 matched rows
+        count = 0
+        for i in range(total):
+            matches = False
+            if hasattr(model, 'filterAcceptsRow'):
+                matches = model.filterAcceptsRow(i, QModelIndex())
+            elif hasattr(model, 'filter_function') and model.filter_function:
+                matches = model.filter_function(i, QModelIndex())
+            else:
+                matches = True
+                
+            if matches and count < 3:
+                page = i // source.PAGE_SIZE
+                row_in_page = i % source.PAGE_SIZE
+                if page in source._loaded_data and row_in_page < len(source._loaded_data[page]):
+                    item = source._loaded_data[page][row_in_page]
+                    protein_id = item.get('display', {}).get('Protein ID', 'unknown')
+                    logging.debug(f"Match #{count+1}: Row {i} - {protein_id}")
+                    count += 1
+
+    def verify_model_chain(self):
+        """Verify and fix model chain if needed"""
+        print("\n=== VERIFYING MODEL CHAIN ===")
+        table_model = self.table.model()
+        
+        # Print current state
+        print(f"Current table model type: {type(table_model).__name__}")
+        print(f"Proxy model type: {type(self.proxy_model).__name__}")
+        print(f"Source model type: {type(self.model).__name__}")
+        
+        # Check if table has correct model
+        if table_model is not self.proxy_model:
+            print("MODEL CHAIN BROKEN - Fixing...")
+            
+            # IMPORTANT: Preserve data before switching models
+            data_reference = None
+            total_rows = 0
+            if hasattr(table_model, '_data'):
+                data_reference = table_model._data
+                total_rows = getattr(table_model, '_total_rows', 0)
+                print(f"Preserving data reference with {total_rows} rows")
+            
+            # Set the proxy model
+            self.table.setModel(self.proxy_model)
+            
+            # CRITICAL: Copy data reference to source model if it was lost
+            source_model = self.model  # direct source model
+            if data_reference is not None and (not hasattr(source_model, '_data') or not source_model._data):
+                print(f"Restoring data reference to source model ({len(data_reference)} items)")
+                source_model._data = data_reference
+                source_model._total_rows = total_rows
+                source_model._loaded_data.clear()  # Clear any corrupted cache
+            
+            # Force data load now that reference is restored
+            print(f"Forcing data load with _total_rows = {source_model._total_rows}")
+            source_model._load_page(0)
+            
+            # Force update to reflect changes
+            self.proxy_model.beginResetModel()
+            self.proxy_model.endResetModel()
+            return True
+        else:
+            print("Model chain is correct")
+            return False
+    
+    def test_filter_directly(self):
+        """Debug helper to directly test filtering on specific rows"""
+        print("\n=== DIRECT FILTER TEST ===")
+        model = self.table.model()
+        filter_text = self.filter_edit.text()
+        print(f"Testing filter: '{filter_text}'")
+        
+        # Check model type
+        print(f"Model type: {type(model).__name__}")
+        
+        # Get source model
+        if hasattr(model, 'sourceModel'):
+            source_model = model.sourceModel()
+            print(f"Source model: {type(source_model).__name__}")
+            
+            # Debug loaded data
+            loaded_pages = list(source_model._loaded_data.keys())
+            print(f"Loaded pages: {loaded_pages}")
+            
+            # Force load page 0 if needed
+            page = 0
+            if page not in source_model._loaded_data or not source_model._loaded_data[page]:
+                print(f"Forcing load of page {page}...")
+                source_model._load_page(page)
+            
+            # Check page contents
+            if page in source_model._loaded_data:
+                page_data = source_model._loaded_data[page]
+                print(f"Page {page} has {len(page_data)} items")
+                
+                # Test only rows that exist
+                for row in range(min(3, len(page_data))):
+                    row_in_page = row % source_model.PAGE_SIZE
+                    print(f"\nTesting row {row}:")
+                    
+                    # Safely access row data
+                    if row_in_page < len(page_data):
+                        row_data = page_data[row_in_page]
+                        protein_id = row_data.get('display', {}).get('Protein ID', 'unknown')
+                        print(f"Row {row} data: ID={protein_id}")
+                        
+                        # Test filter
+                        match_found = False
+                        for col_name, value in row_data.get('display', {}).items():
+                            if isinstance(value, str) and filter_text.lower() in str(value).lower():
+                                print(f"MATCH in column '{col_name}': '{value}'")
+                                match_found = True
+                        
+                        if not match_found:
+                            print(f"NO MATCH for row {row}")
+                    else:
+                        print(f"Row {row} out of bounds")
+            else:
+                print(f"Page {page} not loaded")
+        else:
+            print("Model doesn't have sourceModel")
+
+    def filter_changed(self,text):
+        # Apply filter immediately to model
+        self.proxy_model.setFilterText(text)
+        self.debug_filter_counts(text)
+        
+        # Reset the model completely to force update
+        self.proxy_model.beginResetModel()
+        self.proxy_model.endResetModel()
+            
+            # Force update visible rows
+        self.force_complete_view_update()
+            
+            # Show "Filtering..." in status bar immediately
+        if text:
+                self.status_bar.showMessage(f"Filtering for '{text}'...")
+        else:
+                self.status_bar.showMessage("Filter cleared")
+                
+        # Connect filter signal (disconnect first to avoid duplicates)
+        self.filter_edit.textChanged.disconnect()
+        self.filter_edit.textChanged.connect(self.filter_changed)
+        
+        # Add keyboard shortcut to force refresh filter (F3)
+        self.refresh_filter_shortcut = QShortcut(QKeySequence("F3"), self)
+        self.refresh_filter_shortcut.activated.connect(lambda: self.force_refresh_filter())     
+
+    def force_refresh_filter(self):
+        """Force refresh filtering when F3 is pressed"""
+        current_text = self.filter_edit.text()
+        logging.debug(f"Force refreshing filter: '{current_text}'")
+        
+        # Complete reset of proxy model
+        self.proxy_model.invalidateFilter()
+        
+        # Reset table view
+        self.table.reset()
+        
+        # Force viewport update
+        self.table.viewport().update()
+        
+        # Show count of visible rows
+        self.check_filter_status(current_text)
+        
+        # Scroll to top to ensure results are visible
+        self.table.scrollToTop()
+        
+        # Show message in status bar
+        self.status_bar.showMessage(f"Filter refreshed: '{current_text}'")            
+
+    def show_filter_active(self, is_active=True):
+        """Apply visual styling to indicate filtering is active"""
+        if is_active:
+            # Add highlight border to filter box to show it's active
+            self.filter_edit.setStyleSheet("""
+                QLineEdit {
+                    border: 2px solid #0078D7;
+                    border-radius: 3px;
+                    padding: 3px;
+                    background-color: #F0F8FF;
+                }
+            """)
+        else:
+            # Reset to default style
+            self.filter_edit.setStyleSheet("""
+                QLineEdit {
+                    border: 1px solid #D3D3D3;
+                    border-radius: 3px;
+                    padding: 3px;
+                }
+            """)
+
+    def check_filter_status(self, filter_text):
+        """Debug helper to check filtering status on first few rows"""
+        model = self.table.model()
+        
+        # Check if we're working with a proxy model
+        if not model:
+            return
+            
+        # Calculate based on model type
+        if hasattr(model, 'sourceModel'):
+            # This is a proxy model
+            source_model = model.sourceModel()
+            # Calculate visible rows using filter
+            total_visible = 0
+            total_rows = source_model.rowCount()
+            for row in range(total_rows):
+                if model.filterAcceptsRow(row, QModelIndex()):
+                    total_visible += 1
+        else:
+            # Direct model - all rows are visible when no filter
+            source_model = model
+            total_visible = total_rows = source_model.rowCount()
+        
+        # Log summary
+        logging.debug(f"Filter '{filter_text}' shows {total_visible} of {total_rows} rows total")
+        
+        # Update status bar and visual indicator
+        if hasattr(self, 'status_bar'):
+            if filter_text:
+                self.status_bar.showMessage(f"Showing {total_visible} of {total_rows} results matching '{filter_text}'")
+                self.show_filter_active(True)
+            else:
+                self.status_bar.showMessage(f"Showing all {total_rows} results")
+                self.show_filter_active(False)
+        
+        # Add visual indicator in window title
+        if filter_text:
+            self.setWindowTitle(f"Results - {self.file_path} [FILTERED: {total_visible}/{total_rows}]")
+        else:
+            self.setWindowTitle(f"Results - {self.file_path}")    
+            
+    
     def create_main_table(self):
         """Create and configure main table with virtual model"""
         self.table = QTableView()
@@ -120,11 +529,17 @@ class DynamicTableWindow(QMainWindow):
 
         # Set up virtual model
         self.model = VirtualTableModel(self.parsed_results, self.go_definitions)
-        self.table.setModel(self.model)
+        #self.table.setModel(self.model)
 
         from model.data_model import WidgetDelegate
         self.widget_delegate = WidgetDelegate()
         self.table.setItemDelegate(self.widget_delegate)
+
+        from model.data_model import CustomFilterProxyModel
+
+        proxy_model= CustomFilterProxyModel(self,identifier="main_proxy")
+        proxy_model.setSourceModel(self.model)    
+
 
         # Configure table
         self.table.setObjectName("MainResultsTable")
@@ -235,10 +650,15 @@ class DynamicTableWindow(QMainWindow):
     def create_filter_bar(self):
             self.filter_layout = QHBoxLayout()
 
-            self.open_dialog_button = QPushButton("Filter")
+            filter_edit = QLineEdit()
+            filter_edit.setPlaceholderText("Filtrer toutes les colonnes...")
+            self.filter_layout.addWidget(filter_edit)
+
+
+            """ self.open_dialog_button = QPushButton("Filter")
             self.open_dialog_button.setIcon(QIcon("./assets/dialog-icon.png"))
             self.open_dialog_button.clicked.connect(self.open_dialog)
-            self.filter_layout.addWidget(self.open_dialog_button)
+            self.filter_layout.addWidget(self.open_dialog_button) """
 
             # Style
             self.setStyleSheet("""
@@ -246,19 +666,6 @@ class DynamicTableWindow(QMainWindow):
                 border: 1px solid #D3D3D3;
                 border-radius: 3px;
                 padding: 3px;
-            }
-            QPushButton {
-                background-color: #C0C0C0;
-                color: black;
-                border-radius: 3px;
-                font-weight: bold ;
-                padding: 5px 10px;
-            }
-            QPushButton:hover {
-                background-color: #7393B3;
-            }
-            QLabel {
-                font-weight: normal;
             }
             """)
 
