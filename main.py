@@ -122,7 +122,7 @@ class AppController(QObject):
                 )
                 
                 # Important: Set total rows in model if we have that information
-                if hasattr(self.loader_thread, 'total_count') and self.loader_thread.total_count > 0:
+                if hasattr(self.loader_thread, 'total_count') and self.loader_thread.total_count > 0: 
                     model._total_rows = self.loader_thread.total_count
                     
             else:

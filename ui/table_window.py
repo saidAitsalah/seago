@@ -1,34 +1,31 @@
 from PySide6.QtWidgets import (
-    QMainWindow, QScrollArea, QApplication, QTableWidget, QSplitter,
+    QMainWindow, QScrollArea, QSplitter,
     QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton,
-    QWidget, QGraphicsDropShadowEffect, QMenuBar, QSpacerItem, QSizePolicy,
-    QMessageBox, QDialog, QStatusBar, QTextEdit, QTabWidget, QComboBox,QHeaderView,QTableView,
-    QTableWidgetItem, QProgressBar,QSpinBox
+    QWidget, QGraphicsDropShadowEffect, QMenuBar, 
+    QMessageBox, QDialog, QStatusBar, QTabWidget, QComboBox,QHeaderView,QTableView, QProgressBar
 )
 from PySide6 import QtWidgets
 from PySide6.QtGui import (
-    QAction, QIcon, QPainter, QColor, QFont, QPixmap, QKeySequence, QShortcut
+    QAction, QIcon,QColor, QKeySequence, QShortcut
 )
 from PySide6.QtCore import (
-    Qt, QTimer, QMetaObject, Slot,QAbstractTableModel,QModelIndex, Signal, QObject, QThread
+    Qt, QTimer, QModelIndex, Signal,
 )
-from PySide6.QtCharts import QChart, QChartView, QPieSeries
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from pyvis.network import Network
-import json
 import os
 import traceback
-from typing import List, Dict, Any, Tuple
 from utils.table_manager import DataTableManager
 from utils.export_utils import export_to_json, export_to_csv, export_to_tsv
 from utils.OBO_handler import obo
 from ui.donut_widget import Widget
-from utils.loading.DataLoader import FileLoaderThread
 from model.data_model import VirtualTableModel
-from utils.loading.BatchJsonLoaderThread import BatchJsonLoaderThread
 import logging
 from model.data_model import MAIN_HEADERS
 from utils.loading.StreamingJsonLoader import StreamingJsonLoader
+from utils.Debugging.TableDebugger import TableDebugger
+from ui.FilterManager import FilterManager
+
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -67,22 +64,20 @@ class DynamicTableWindow(QMainWindow):
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("Filtrer toutes les colonnes...")
         self.filter_layout.addWidget(self.filter_edit)
+        self.table_debugger = TableDebugger(self) 
 
-        """     # Reserve space for pagination at the bottom """
         
         self.create_main_table()
+
+        self.filter_manager = FilterManager(self, self.table, self.model)
+        self.proxy_model = self.filter_manager.setup_filter(self.filter_edit, self.filter_layout)
 
         self.complete_filter_setup()
 
         self.create_menu_bar()
         self.create_tab_system()
         self.create_status_bar()
-        
-        # Add pagination container to the bottom of the main layout
-        #self.main_layout.addWidget(self.pagination_container)
-        
-        # Now create pagination controls inside the container
-        #self.create_pagination_controls()
+ 
         self.connect_signals()
         
         # Initialize large data handler
@@ -118,84 +113,6 @@ class DynamicTableWindow(QMainWindow):
             import gc
             gc.collect()
 
-    def force_view_refresh_after_filtering(self):
-        # Reset proxy model completely
-        self.proxy_model.beginResetModel()
-        self.proxy_model.endResetModel()
-        
-        # Force table view to update
-        self.table.reset()
-        self.table.viewport().update()
-        
-        # Make sure table scrolls to top to show filtered results
-        self.table.scrollToTop()
-    
-    def force_complete_view_update(self):
-        """Force a complete view update after filtering"""
-        # Store current scroll position
-        scroll_bar = self.table.verticalScrollBar()
-        scroll_position = scroll_bar.value()
-        
-        # Get the model and handle different model types
-        model = self.table.model()
-        
-        # Handle different types of models
-        if hasattr(model, 'sourceModel'):
-            # This is a proxy model - get the source model
-            source_model = model.sourceModel()
-            if hasattr(source_model, 'layoutChanged'):
-                source_model.layoutChanged.emit()
-        else:
-            # This is a direct model (VirtualTableModel)
-            source_model = model
-            if hasattr(source_model, 'layoutChanged'):
-                source_model.layoutChanged.emit()
-        
-        # Reset proxy model if we have one
-        if hasattr(self, 'proxy_model'):
-            self.proxy_model.beginResetModel()
-            self.proxy_model.endResetModel()   
-        # Reset page to 0 when filtering
-        if hasattr(self.model, 'setPage'):
-            self.model.setPage(0)         
-        # Force complete model and view reset
-        self.table.reset()
-        
-        # Update all layers of the view
-        self.table.viewport().update()
-        self.table.repaint()
-        
-        # Restore scroll position if needed
-        scroll_bar.setValue(0)  # Always scroll to top when filtering
-        
-        # Immediately update row count in status bar
-        self.check_filter_status(self.filter_edit.text())    
-
-    def test_specific_row(self):
-        """Force test filter on specific rows"""
-        model = self.table.model()
-        filter_text = "96"  # Hard-coded test filter
-        
-        print("\n===DIRECT FILTER TEST===")
-        row = 0  # Test the first row
-        
-        # Test if filterAcceptsRow exists and call it directly
-        if hasattr(model, 'filterAcceptsRow'):
-            print(f"Calling filterAcceptsRow directly on row {row}...")
-            result = model.filterAcceptsRow(row, QModelIndex())
-            print(f"Direct result: {result}")
-            
-            # If it has a sourceModel, check the data
-            if hasattr(model, 'sourceModel'):
-                source_model = model.sourceModel()
-                if hasattr(source_model, '_loaded_data'):
-                    page = row // source_model.PAGE_SIZE
-                    row_in_page = row % source_model.PAGE_SIZE
-                    if page in source_model._loaded_data:
-                        row_data = source_model._loaded_data[page][row_in_page]
-                        print(f"Data for row {row}: {row_data.get('display', {}).get('Protein ID', 'N/A')}")
-        else:
-            print("Model has no filterAcceptsRow method!")
 
     def complete_filter_setup(self):
         """Connect filter to the table model after both exist"""
@@ -208,7 +125,9 @@ class DynamicTableWindow(QMainWindow):
         # Set proxy model on table
         self.table.setModel(self.proxy_model)
 
-        self.filter_edit.textChanged.connect(self.on_filter_text_changed)
+        self.filter_edit.textChanged.connect(self.filter_manager.on_filter_text_changed)
+        self.proxy_model.filterProgressChanged.connect(self.filter_manager.update_filter_status)
+
 
         print(f"TABLE MODEL IS: {type(self.table.model()).__name__}")
         print(f"PROXY MODEL IS: {type(self.proxy_model).__name__}")
@@ -229,7 +148,7 @@ class DynamicTableWindow(QMainWindow):
             if current_filter:
                 logging.debug(f"Applying filter: '{current_filter}' - refreshing view")
                 # Verify status on first few rows
-                self.check_filter_status(current_filter)
+                self.filter_manager.check_filter_status(current_filter)
             
             # Scroll to top to make filtered results visible
             self.table.scrollToTop()
@@ -238,188 +157,18 @@ class DynamicTableWindow(QMainWindow):
         self.filter_timer.setSingleShot(True)
         self.filter_timer.timeout.connect(delayed_update)
         
-    def on_filter_text_changed(self, text):
-            # Apply filter
-
-            self.verify_model_chain() 
-            self.proxy_model.setFilterText(text)
-
-            self.test_filter_directly()  # ADD THIS LINE
-
-
-            self.debug_filter_counts(text)
-
             
-            # Force view update
-            self.force_complete_view_update()
-        
-    def debug_filter_counts(self, filter_text):
-        """Debug helper to manually check filter counts"""
-        model = self.table.model()
-        
-        # Check if this is a proxy model or direct model
-        if hasattr(model, 'sourceModel'):
-            # This is a proxy model
-            source = model.sourceModel()
-        else:
-            # This is a direct model - use it directly
-            source = model
-        
-        # Manually check filtered count
-        matched = 0
-        total = source._total_rows
-        
-        # Use appropriate filtering method based on model type
-        if hasattr(model, 'filterAcceptsRow'):
-            # For proxy models
-            for i in range(total):
-                if model.filterAcceptsRow(i, QModelIndex()):
-                    matched += 1
-        else:
-            # For direct models with filter function
-            if hasattr(model, 'filter_function') and model.filter_function:
-                for i in range(total):
-                    if model.filter_function(i, QModelIndex()):
-                        matched += 1
-            else:
-                # No filtering
-                matched = total
-        
-        logging.debug(f"Manual count: Filter '{filter_text}' matches {matched} of {total} rows")
-        
-        # Report first 3 matched rows
-        count = 0
-        for i in range(total):
-            matches = False
-            if hasattr(model, 'filterAcceptsRow'):
-                matches = model.filterAcceptsRow(i, QModelIndex())
-            elif hasattr(model, 'filter_function') and model.filter_function:
-                matches = model.filter_function(i, QModelIndex())
-            else:
-                matches = True
-                
-            if matches and count < 3:
-                page = i // source.PAGE_SIZE
-                row_in_page = i % source.PAGE_SIZE
-                if page in source._loaded_data and row_in_page < len(source._loaded_data[page]):
-                    item = source._loaded_data[page][row_in_page]
-                    protein_id = item.get('display', {}).get('Protein ID', 'unknown')
-                    logging.debug(f"Match #{count+1}: Row {i} - {protein_id}")
-                    count += 1
-
-    def verify_model_chain(self):
-        """Verify and fix model chain if needed"""
-        print("\n=== VERIFYING MODEL CHAIN ===")
-        table_model = self.table.model()
-        
-        # Print current state
-        print(f"Current table model type: {type(table_model).__name__}")
-        print(f"Proxy model type: {type(self.proxy_model).__name__}")
-        print(f"Source model type: {type(self.model).__name__}")
-        
-        # Check if table has correct model
-        if table_model is not self.proxy_model:
-            print("MODEL CHAIN BROKEN - Fixing...")
-            
-            # IMPORTANT: Preserve data before switching models
-            data_reference = None
-            total_rows = 0
-            if hasattr(table_model, '_data'):
-                data_reference = table_model._data
-                total_rows = getattr(table_model, '_total_rows', 0)
-                print(f"Preserving data reference with {total_rows} rows")
-            
-            # Set the proxy model
-            self.table.setModel(self.proxy_model)
-            
-            # CRITICAL: Copy data reference to source model if it was lost
-            source_model = self.model  # direct source model
-            if data_reference is not None and (not hasattr(source_model, '_data') or not source_model._data):
-                print(f"Restoring data reference to source model ({len(data_reference)} items)")
-                source_model._data = data_reference
-                source_model._total_rows = total_rows
-                source_model._loaded_data.clear()  # Clear any corrupted cache
-            
-            # Force data load now that reference is restored
-            print(f"Forcing data load with _total_rows = {source_model._total_rows}")
-            source_model._load_page(0)
-            
-            # Force update to reflect changes
-            self.proxy_model.beginResetModel()
-            self.proxy_model.endResetModel()
-            return True
-        else:
-            print("Model chain is correct")
-            return False
-    
-    def test_filter_directly(self):
-        """Debug helper to directly test filtering on specific rows"""
-        print("\n=== DIRECT FILTER TEST ===")
-        model = self.table.model()
-        filter_text = self.filter_edit.text()
-        print(f"Testing filter: '{filter_text}'")
-        
-        # Check model type
-        print(f"Model type: {type(model).__name__}")
-        
-        # Get source model
-        if hasattr(model, 'sourceModel'):
-            source_model = model.sourceModel()
-            print(f"Source model: {type(source_model).__name__}")
-            
-            # Debug loaded data
-            loaded_pages = list(source_model._loaded_data.keys())
-            print(f"Loaded pages: {loaded_pages}")
-            
-            # Force load page 0 if needed
-            page = 0
-            if page not in source_model._loaded_data or not source_model._loaded_data[page]:
-                print(f"Forcing load of page {page}...")
-                source_model._load_page(page)
-            
-            # Check page contents
-            if page in source_model._loaded_data:
-                page_data = source_model._loaded_data[page]
-                print(f"Page {page} has {len(page_data)} items")
-                
-                # Test only rows that exist
-                for row in range(min(3, len(page_data))):
-                    row_in_page = row % source_model.PAGE_SIZE
-                    print(f"\nTesting row {row}:")
-                    
-                    # Safely access row data
-                    if row_in_page < len(page_data):
-                        row_data = page_data[row_in_page]
-                        protein_id = row_data.get('display', {}).get('Protein ID', 'unknown')
-                        print(f"Row {row} data: ID={protein_id}")
-                        
-                        # Test filter
-                        match_found = False
-                        for col_name, value in row_data.get('display', {}).items():
-                            if isinstance(value, str) and filter_text.lower() in str(value).lower():
-                                print(f"MATCH in column '{col_name}': '{value}'")
-                                match_found = True
-                        
-                        if not match_found:
-                            print(f"NO MATCH for row {row}")
-                    else:
-                        print(f"Row {row} out of bounds")
-            else:
-                print(f"Page {page} not loaded")
-        else:
-            print("Model doesn't have sourceModel")
-
     def filter_changed(self,text):
         # Apply filter immediately to model
         self.proxy_model.setFilterText(text)
-        self.debug_filter_counts(text)
+        TableDebugger.debug_filter_counts(text)
         
         # Reset the model completely to force update
         self.proxy_model.beginResetModel()
         self.proxy_model.endResetModel()
             
             # Force update visible rows
-        self.force_complete_view_update()
+        self.filter_manager.force_complete_view_update()
             
             # Show "Filtering..." in status bar immediately
         if text:
@@ -433,93 +182,7 @@ class DynamicTableWindow(QMainWindow):
         
         # Add keyboard shortcut to force refresh filter (F3)
         self.refresh_filter_shortcut = QShortcut(QKeySequence("F3"), self)
-        self.refresh_filter_shortcut.activated.connect(lambda: self.force_refresh_filter())     
-
-    def force_refresh_filter(self):
-        """Force refresh filtering when F3 is pressed"""
-        current_text = self.filter_edit.text()
-        logging.debug(f"Force refreshing filter: '{current_text}'")
-        
-        # Complete reset of proxy model
-        self.proxy_model.invalidateFilter()
-        
-        # Reset table view
-        self.table.reset()
-        
-        # Force viewport update
-        self.table.viewport().update()
-        
-        # Show count of visible rows
-        self.check_filter_status(current_text)
-        
-        # Scroll to top to ensure results are visible
-        self.table.scrollToTop()
-        
-        # Show message in status bar
-        self.status_bar.showMessage(f"Filter refreshed: '{current_text}'")            
-
-    def show_filter_active(self, is_active=True):
-        """Apply visual styling to indicate filtering is active"""
-        if is_active:
-            # Add highlight border to filter box to show it's active
-            self.filter_edit.setStyleSheet("""
-                QLineEdit {
-                    border: 2px solid #0078D7;
-                    border-radius: 3px;
-                    padding: 3px;
-                    background-color: #F0F8FF;
-                }
-            """)
-        else:
-            # Reset to default style
-            self.filter_edit.setStyleSheet("""
-                QLineEdit {
-                    border: 1px solid #D3D3D3;
-                    border-radius: 3px;
-                    padding: 3px;
-                }
-            """)
-
-    def check_filter_status(self, filter_text):
-        """Debug helper to check filtering status on first few rows"""
-        model = self.table.model()
-        
-        # Check if we're working with a proxy model
-        if not model:
-            return
-            
-        # Calculate based on model type
-        if hasattr(model, 'sourceModel'):
-            # This is a proxy model
-            source_model = model.sourceModel()
-            # Calculate visible rows using filter
-            total_visible = 0
-            total_rows = source_model.rowCount()
-            for row in range(total_rows):
-                if model.filterAcceptsRow(row, QModelIndex()):
-                    total_visible += 1
-        else:
-            # Direct model - all rows are visible when no filter
-            source_model = model
-            total_visible = total_rows = source_model.rowCount()
-        
-        # Log summary
-        logging.debug(f"Filter '{filter_text}' shows {total_visible} of {total_rows} rows total")
-        
-        # Update status bar and visual indicator
-        if hasattr(self, 'status_bar'):
-            if filter_text:
-                self.status_bar.showMessage(f"Showing {total_visible} of {total_rows} results matching '{filter_text}'")
-                self.show_filter_active(True)
-            else:
-                self.status_bar.showMessage(f"Showing all {total_rows} results")
-                self.show_filter_active(False)
-        
-        # Add visual indicator in window title
-        if filter_text:
-            self.setWindowTitle(f"Results - {self.file_path} [FILTERED: {total_visible}/{total_rows}]")
-        else:
-            self.setWindowTitle(f"Results - {self.file_path}")    
+        self.refresh_filter_shortcut.activated.connect(lambda: self.filter_manager.force_refresh_filter())     
             
     
     def create_main_table(self):
@@ -1007,14 +670,7 @@ class DynamicTableWindow(QMainWindow):
         # status bar
         self.statusBar().showMessage("Filters cleared.")
 
-
-    #to review
-    def reset_table_visibility(self):
-        """Reset the visibility of all rows in the table."""
-        for row in range(self.table.rowCount()):
-            self.table.setRowHidden(row, False)
-
-
+    """********** TABS ***************************************************************************"""
 
     def create_blast_tab(self, data):
         """Create Blast results tab"""
@@ -1117,8 +773,9 @@ class DynamicTableWindow(QMainWindow):
         except Exception as e:
             pass
             print(f"Error generating or displaying the GO graph: {e}")
-        # ...existing code...
             return None
+        
+    """*************************************************************************************************"""    
 
     def on_scroll_change(self, value):
         """Handle scroll events for dynamic loading"""
@@ -1132,63 +789,6 @@ class DynamicTableWindow(QMainWindow):
             if scrollbar.value() > scrollbar.maximum() * 0.8:
                 self.request_more_data.emit(model.rowCount())
 
-    def create_visible_widgets(self):
-        """Create widgets only for visible rows with throttling"""
-        model = self.table.model()
-        if not model:
-            return
-            
-        # Get visible rows
-        from_data_mgr = hasattr(model, "widgets") and hasattr(model, "widget_cells")
-        if not from_data_mgr:
-            return
-        
-        visible_rect = self.table.viewport().rect()
-        first_visible = self.table.rowAt(visible_rect.top())
-        last_visible = self.table.rowAt(visible_rect.bottom())
-        
-        if first_visible < 0:
-            first_visible = 0
-        if last_visible < 0:
-            last_visible = min(first_visible + 20, model.rowCount() - 1)
-        
-        # Update model's visible range
-        model.setVisibleRows(first_visible, last_visible)
-        
-        # Limit the number of widgets to create per call to prevent freezing
-        widgets_created = 0
-        max_widgets_per_call = 10
-        
-        # Create widgets only for visible rows
-        for row in range(first_visible, last_visible + 1):
-            if widgets_created >= max_widgets_per_call:
-                # Schedule another call to continue creating widgets
-                QTimer.singleShot(50, self.create_visible_widgets)
-                return
-                
-            if row >= model.rowCount():
-                continue
-            
-            # REMOVED: Don't check loaded_rows when deciding if widgets should be created
-            # if row in model.loaded_rows:
-            #     continue  # Skip already processed rows
-                
-            # Instead, track which cells have been processed this scroll cycle
-            processed_this_time = False
-            
-            for col in range(model.columnCount()):
-                # Only process widget cells
-                if (row, col) in model.widget_cells and (row, col) not in model.widgets:
-                    self.create_widget_for_cell(row, col)
-                    widgets_created += 1
-                    processed_this_time = True
-                    
-                    if widgets_created >= max_widgets_per_call:
-                        break
-            
-            # Only mark as loaded if we actually processed it
-            if processed_this_time:
-                model.loaded_rows.add(row)
 
     def on_request_more_data(self, current_count):
         """Request more data to be loaded when scrolling near the end"""
@@ -1299,22 +899,7 @@ class DynamicTableWindow(QMainWindow):
             logging.error(f"Failed to create pagination controls: {str(e)}")
             traceback.print_exc()
             return False
-        
-    def on_prev_page(self):
-        """Go to the previous page"""
-        model = self.table.model()
-        if model and model.current_page > 0:
-            self.navigate_to_page(model.current_page)  # Current page is 0-based internally
 
-    def on_next_page(self):
-        """Go to the next page"""
-        model = self.table.model()
-        if not model:
-            return
-            
-        max_page = max(0, (model._total_rows - 1) // model.PAGE_SIZE)
-        if model.current_page < max_page:
-            self.navigate_to_page(model.current_page + 2)  # +2 because current_page is 0-based
 
     @staticmethod
     def is_widget_valid(widget):
@@ -1434,51 +1019,6 @@ class DynamicTableWindow(QMainWindow):
                     if widgets_created >= max_widgets_per_call:
                         break
 
-    def debug_widget_state(self):
-        """Debug widget state for current page"""
-        model = self.table.model()
-        if not model:
-            return
-            
-        page = model.current_page
-        
-        # Get debugging info
-        debug_info = [
-            f"Current Page: {page+1}",
-            f"Widget Count: {len(model.widgets)}",
-            f"Widget Cells Count: {len(model.widget_cells)}"
-        ]
-        
-        # Sample some widgets
-        if model.widgets:
-            debug_info.append("\nSample Widgets:")
-            count = 0
-            for (row, col), widget in list(model.widgets.items())[:5]:
-                # Get widget type and data
-                widget_type = "Unknown"
-                widget_data = "Unknown"
-                
-                page_row = row % model.PAGE_SIZE
-                if page in model._loaded_data and page_row < len(model._loaded_data[page]):
-                    row_data = model._loaded_data[page][page_row]
-                    if "widgets" in row_data:
-                        for key, info in row_data["widgets"].items():
-                            if key.lower() == model.HEADERS[col].lower():
-                                widget_type = info.get("type", "Unknown")
-                                widget_data = info.get("data", "Unknown")
-                                break
-                                
-                debug_info.append(f"  Widget({row},{col}): Type={widget_type}, Data={widget_data}")
-                count += 1
-                if count >= 5:
-                    break
-        
-        # Log the debug info
-        for line in debug_info:
-            logging.debug(line)
-            
-        # Return as a string for potential display
-        return "\n".join(debug_info)
     
     def create_widget_for_cell(self, row, col):
         """Create a widget for a specific cell with proper page awareness"""
@@ -1521,19 +1061,6 @@ class DynamicTableWindow(QMainWindow):
         
         return None
 
-    """     def on_scroll_change(self, value):
-            self.create_visible_widgets()
-            
-            # Check if we're near the end of our data
-            model = self.table.model()
-            if not model:
-                return
-                
-            scrollbar = self.table.verticalScrollBar()
-            # If we're more than 80% through the loaded data, request more
-            if scrollbar.value() > scrollbar.maximum() * 0.8:
-                self.request_more_data.emit(model.rowCount()) """
-
     def on_data_batch_loaded(self, batch, start_index, total_count):
         """Handle loaded data batch"""
         try:
@@ -1551,7 +1078,12 @@ class DynamicTableWindow(QMainWindow):
             
             # Add to model
             model = self.table.model()
-            if model:
+            if hasattr(model, 'sourceModel'):
+                # Access source model for data operations
+                source_model = model.sourceModel()
+                source_model._data.extend(processed_data)
+                source_model._total_rows = len(source_model._data)
+            else:
                 first_new_row = model.rowCount()
                 model.beginInsertRows(QModelIndex(), first_new_row, first_new_row + len(processed_data) - 1)
                 model._data.extend(processed_data)
@@ -1791,154 +1323,7 @@ class DynamicTableWindow(QMainWindow):
             logging.error(f"Error recreating widgets: {str(e)}")
             traceback.print_exc()
 
-    def _force_page_reload(self):
-        """Force reload and redisplay of current page"""
-        model = self.table.model()
-        if not model:
-            return
-            
-        # Get current page
-        page = model.current_page
-        
-        # Remove from cache
-        if page in model._loaded_data:
-            del model._loaded_data[page]
-            
-        # Clear widgets
-        model.widgets = {}
-        model.loaded_rows = set()
-        
-        # Reload data
-        model._load_page(page)
-        
-        # Reset model to force redraw
-        model.beginResetModel()
-        model.endResetModel()
-        
-        # Force update
-        self.table.viewport().update()
-        
-        # Debug output
-        logging.debug(f"Forced reload of page {page+1}")
-
-    def _verify_page_data(self, expected_page=None):
-        """Verify that correct page data is actually displayed"""
-        model = self.table.model()
-        if not model:
-            return False
-        
-        # Get expected page
-        page = expected_page if expected_page is not None else model.current_page
-        
-        # Check if data loaded
-        if page not in model._loaded_data:
-            logging.warning(f"Page {page+1} data not loaded!")
-            return False
-        
-        # Log first few items for verification
-        page_data = model._loaded_data[page]
-        
-        logging.debug(f"Verifying page {page+1} data:")
-        for i in range(min(3, len(page_data))):
-            item = page_data[i]
-            protein_id = item.get("display", {}).get("Protein ID", "N/A")
-            debug_id = item.get("display", {}).get("_debug_id", "No ID")
-            logging.debug(f"Item {i}: ID={protein_id}, Debug ID={debug_id}")
-        
-        # Force view update if not showing correct data
-        if model.rowCount() < 1 and len(page_data) > 0:
-            logging.warning("Model reports zero rows but data exists! Forcing update.")
-            model.beginResetModel()
-            model.endResetModel()
-            self.table.viewport().update()
-            return False
-            
-        return True
-
-    def emergency_page_fix(self):
-        """Emergency fix for page display issues without causing loops"""
-        model = self.table.model()
-        if not model:
-            return
-        
-        # Get current page
-        page = model.current_page
-        
-        # Use a static flag to prevent recursive calls
-        if hasattr(self, '_currently_fixing') and self._currently_fixing:
-            logging.warning("Already fixing page - preventing recursive calls")
-            return
-            
-        try:
-            # Set flag to prevent recursion
-            self._currently_fixing = True
-            
-            # Force clean reload
-            if page in model._loaded_data:
-                page_data = model._loaded_data[page].copy()  # Make a copy
-                del model._loaded_data[page]  # Delete from cache
-                
-                # Reset model
-                model.beginResetModel()
-                model._loaded_data[page] = page_data  # Restore the data
-                model.endResetModel()
-                
-                # Force update
-                self.table.viewport().update()
-                self._debug_log_current_page_data("After emergency fix")
-                
-                logging.debug("Emergency page fix applied")
-                
-                # Schedule additional updates
-                QTimer.singleShot(10, self.table.viewport().update)
-                QTimer.singleShot(10, self.update_pagination_info)
-                
-        finally:
-            # Always clear flag when done
-            self._currently_fixing = False
-
-    def _verify_page_data_matches(self, page_idx):
-        """Verify that the displayed page data matches the loaded data"""
-        model = self.table.model()
-        if not model or page_idx not in model._loaded_data:
-            return False
-        
-        # Compare cached data with what's being shown
-        page_data = model._loaded_data[page_idx]
-        
-        # Check first few visible rows
-
-
-        # Check first few visible rows
-        visible_rect = self.table.viewport().rect()
-        first_visible = self.table.rowAt(visible_rect.top())
-        
-        if first_visible < 0:
-            first_visible = 0
-            
-        # Compare a sample row
-        if first_visible < len(page_data):
-            cached_item = page_data[first_visible]
-            displayed_item = None
-            
-            # Get the displayed data for this row
-            try:
-                protein_id_idx = model.HEADERS.index("Protein ID")
-                displayed_id = model.data(model.index(first_visible, protein_id_idx), Qt.DisplayRole)
-                
-                # Get expected protein ID from cached data
-                expected_id = cached_item.get("display", {}).get("Protein ID", "N/A")
-                
-                if displayed_id != expected_id:
-                    logging.warning(f"Data mismatch! Row {first_visible}: Displayed={displayed_id}, Expected={expected_id}")
-                    
-                    # Attempt emergency fix - force data synchronization
-                    self.emergency_page_fix()
-                    return False
-            except Exception as e:
-                logging.error(f"Error verifying data match: {str(e)}")
-        
-        return True
+    
 
     def _debug_log_current_page_data(self, message):
         """Log the first few items from the current page for debugging"""
@@ -1960,40 +1345,7 @@ class DynamicTableWindow(QMainWindow):
         else:
             logging.debug(f"No data loaded for page {page+1}")
             
-    def debug_pagination(self):
-        """Debug function to print current pagination state"""
-        try:
-            model = self.table.model()
-            if not model:
-                QMessageBox.information(self, "Debug", "No model loaded")
-                return
-                
-            # Gather debugging info
-            debug_info = [
-                f"Current page: {model.current_page + 1}",
-                f"Page size: {model.PAGE_SIZE}",
-                f"Total rows: {model._total_rows}",
-                f"Max pages: {(model._total_rows + model.PAGE_SIZE - 1) // model.PAGE_SIZE}",
-                f"Loaded pages: {list(model._loaded_data.keys())}",
-                f"Memory usage: {model._memory_usage:.2f} MB"
-            ]
-            
-            # Show debug info
-            info = "\n".join(debug_info)
-            QMessageBox.information(self, "Pagination Debug", info)
-            
-            # Force reload current page data
-            current_page = model.current_page
-            if current_page in model._loaded_data:
-                del model._loaded_data[current_page]
-            model._load_page(current_page)
-            
-            # Force update
-            self.table.viewport().update()
-            
-        except Exception as e:
-            logging.error(f"Error in debug_pagination: {str(e)}")
-            traceback.print_exc()
+
             
     def create_debug_tools(self):
         """Create debugging tools for pagination issues"""
@@ -2003,15 +1355,15 @@ class DynamicTableWindow(QMainWindow):
         
         # Bouton pour comparer les pages
         compare_btn = QPushButton("Compare Pages")
-        compare_btn.clicked.connect(self.debug_compare_pages)
+        compare_btn.clicked.connect(TableDebugger.debug_compare_pages)
         
         # Bouton pour forcer le rechargement de la page
         reload_btn = QPushButton("Reload Current")
-        reload_btn.clicked.connect(self.debug_force_reload_page)
+        reload_btn.clicked.connect(TableDebugger.debug_force_reload_page)
         
         # Bouton pour afficher les cellules actives
         cells_btn = QPushButton("Show Cell Info")
-        cells_btn.clicked.connect(self.debug_show_cell_info)
+        cells_btn.clicked.connect(TableDebugger.debug_show_cell_info)
         widgets_btn = QPushButton("Debug Widgets")
         widgets_btn.clicked.connect(self.show_widget_debug)
         debug_layout.addWidget(widgets_btn)
@@ -2025,131 +1377,10 @@ class DynamicTableWindow(QMainWindow):
     
     def show_widget_debug(self):
         """Show widget debugging information"""
-        debug_info = self.debug_widget_state()
+        debug_info = TableDebugger.debug_widget_state()
         QMessageBox.information(self, "Widget Debug", debug_info)
 
-    def debug_compare_pages(self):
-        """Compare current page data with next page data"""
-        model = self.table.model()
-        if not model:
-            QMessageBox.information(self, "Debug", "No model loaded")
-            return
-            
-        current_page = model.current_page
-        next_page = current_page + 1
-        
-        # Charger les pages si nécessaire
-        if current_page not in model._loaded_data:
-            model._load_page(current_page)
-        if next_page not in model._loaded_data:
-            model._load_page(next_page)
-        
-        # Comparer les premiers éléments
-        comparison = []
-        comparison.append(f"Current Page: {current_page + 1}")
-        
-        if current_page in model._loaded_data:
-            page_data = model._loaded_data[current_page]
-            for i in range(min(5, len(page_data))):
-                item = page_data[i]
-                protein_id = item.get("display", {}).get("Protein ID", "N/A")
-                debug_id = item.get("display", {}).get("_debug_id", "No ID")
-                comparison.append(f"Item {i}: ID={protein_id}, Debug ID={debug_id}")
-        
-        comparison.append(f"\nNext Page: {next_page + 1}")
-        
-        if next_page in model._loaded_data:
-            page_data = model._loaded_data[next_page]
-            for i in range(min(5, len(page_data))):
-                item = page_data[i]
-                protein_id = item.get("display", {}).get("Protein ID", "N/A")
-                debug_id = item.get("display", {}).get("_debug_id", "No ID")
-                comparison.append(f"Item {i}: ID={protein_id}, Debug ID={debug_id}")
-        
-        # Afficher la comparaison
-        QMessageBox.information(self, "Page Comparison", "\n".join(comparison))
-
-        QMessageBox.information(self, "Page Comparison", "\n".join(comparison))
-
-    def debug_force_reload_page(self):
-        """Force reload current page data"""
-        model = self.table.model()
-        if not model:
-            QMessageBox.information(self, "Debug", "No model loaded")
-            return
-            
-        current_page = model.current_page
-        
-        # Supprimer les données de la page actuelle
-        if current_page in model._loaded_data:
-            del model._loaded_data[current_page]
-        
-        # Recharger les données
-        model._load_page(current_page)
-        
-        # Effacer les widgets pour forcer la recréation
-        model.widgets = {}
-        model.loaded_rows = set()
-        
-        # Forcer la mise à jour
-        self.table.viewport().update()
-        
-        QMessageBox.information(self, "Debug", f"Page {current_page + 1} reloaded")
-
-    def debug_show_cell_info(self):
-        """Show information about selected cells"""
-        model = self.table.model()
-        if not model:
-            QMessageBox.information(self, "Debug", "No model loaded")
-            return
-            
-        # Obtenir la sélection actuelle
-        indexes = self.table.selectionModel().selectedIndexes()
-        if not indexes:
-            QMessageBox.information(self, "Debug", "No cell selected")
-            return
-            
-        index = indexes[0]
-        row = index.row()
-        col = index.column()
-        
-        # Calculer l'index absolu
-        true_row = model.current_page * model.PAGE_SIZE + row
-        
-        # Obtenir l'information sur la cellule
-        page = model.current_page
-        if page in model._loaded_data:
-            try:
-                item = model._loaded_data[page][row]
-                
-                # Préparer les infos
-                info = []
-                info.append(f"Cell: ({row}, {col})")
-                info.append(f"True Row: {true_row}")
-                info.append(f"Header: {model.HEADERS[col]}")
-                
-                if "display" in item:
-                    display_data = item["display"]
-                    info.append("\nDisplay Data:")
-                    for key, value in display_data.items():
-                        if isinstance(value, (str, int, float, bool)) or value is None:
-                            info.append(f"  {key}: {value}")
-                        else:
-                            info.append(f"  {key}: <complex type>")
-                
-                # Vérifier si la cellule a un widget
-                info.append("\nWidget Info:")
-                has_widget = (true_row, col) in model.widget_cells
-                info.append(f"  Has Widget Cell: {has_widget}")
-                widget_created = (row, col) in model.widgets
-                info.append(f"  Widget Created: {widget_created}")
-                
-                # Afficher les informations
-                QMessageBox.information(self, "Cell Info", "\n".join(info))
-            except Exception as e:
-                QMessageBox.warning(self, "Error", f"Error getting cell info: {str(e)}")
-        else:
-            QMessageBox.warning(self, "Error", f"Page {page} not loaded")
+    
             
     def on_prev_page(self):
         """Go to the previous page"""
@@ -2199,126 +1430,8 @@ class DynamicTableWindow(QMainWindow):
         # Debug output
         logging.debug(f"Forced reload of page {page+1}")
 
-    def _verify_page_data(self, expected_page=None):
-        """Verify that correct page data is actually displayed"""
-        model = self.table.model()
-        if not model:
-            return False
-        
-        # Get expected page
-        page = expected_page if expected_page is not None else model.current_page
-        
-        # Check if data loaded
-        if page not in model._loaded_data:
-            logging.warning(f"Page {page+1} data not loaded!")
-            return False
-        
-        # Log first few items for verification
-        page_data = model._loaded_data[page]
-        
-        logging.debug(f"Verifying page {page+1} data:")
-        for i in range(min(3, len(page_data))):
-            item = page_data[i]
-            protein_id = item.get("display", {}).get("Protein ID", "N/A")
-            debug_id = item.get("display", {}).get("_debug_id", "No ID")
-            logging.debug(f"Item {i}: ID={protein_id}, Debug ID={debug_id}")
-        
-        # Force view update if not showing correct data
-        if model.rowCount() < 1 and len(page_data) > 0:
-            logging.warning("Model reports zero rows but data exists! Forcing update.")
-            model.beginResetModel()
-            model.endResetModel()
-            self.table.viewport().update()
-            return False
-            
-        return True
 
-    def emergency_page_fix(self):
-        """Emergency fix for page display issues without causing loops"""
-        model = self.table.model()
-        if not model:
-            return
-        
-        # Get current page
-        page = model.current_page
-        
-        # Use a static flag to prevent recursive calls
-        if hasattr(self, '_currently_fixing') and self._currently_fixing:
-            logging.warning("Already fixing page - preventing recursive calls")
-            return
-            
-        try:
-            # Set flag to prevent recursion
-            self._currently_fixing = True
-            
-            # Force clean reload
-            if page in model._loaded_data:
-                page_data = model._loaded_data[page].copy()  # Make a copy
-                del model._loaded_data[page]  # Delete from cache
-                
-                # Reset model
-                model.beginResetModel()
-                model._loaded_data[page] = page_data  # Restore the data
-                model.endResetModel()
-                
-                # Force update
-                self.table.viewport().update()
-                self._debug_log_current_page_data("After emergency fix")
-                
-                logging.debug("Emergency page fix applied")
-                
-                # Schedule additional updates
-                QTimer.singleShot(10, self.table.viewport().update)
-                QTimer.singleShot(10, self.update_pagination_info)
-                
-        finally:
-            # Always clear flag when done
-            self._currently_fixing = False
-
-    def _verify_page_data_matches(self, page_idx):
-        """Verify that the displayed page data matches the loaded data"""
-        model = self.table.model()
-        if not model or page_idx not in model._loaded_data:
-            return False
-        
-        # Compare cached data with what's being shown
-        page_data = model._loaded_data[page_idx]
-        
-        # Check first few visible rows
-
-
-        # Check first few visible rows
-        visible_rect = self.table.viewport().rect()
-        first_visible = self.table.rowAt(visible_rect.top())
-        
-        if first_visible < 0:
-            first_visible = 0
-            
-        # Compare a sample row
-        if first_visible < len(page_data):
-            cached_item = page_data[first_visible]
-            displayed_item = None
-            
-            # Get the displayed data for this row
-            try:
-                protein_id_idx = model.HEADERS.index("Protein ID")
-                displayed_id = model.data(model.index(first_visible, protein_id_idx), Qt.DisplayRole)
-                
-                # Get expected protein ID from cached data
-                expected_id = cached_item.get("display", {}).get("Protein ID", "N/A")
-                
-                if displayed_id != expected_id:
-                    logging.warning(f"Data mismatch! Row {first_visible}: Displayed={displayed_id}, Expected={expected_id}")
-                    
-                    # Attempt emergency fix - force data synchronization
-                    self.emergency_page_fix()
-                    return False
-            except Exception as e:
-                logging.error(f"Error verifying data match: {str(e)}")
-        
-        return True
-
-
+    
 
 
 
