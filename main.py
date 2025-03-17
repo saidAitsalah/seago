@@ -113,6 +113,12 @@ class AppController(QObject):
                 # First batch: create the UI structure
                 self.results_widget = DynamicTableWindow([], getattr(self.loader_thread, 'file_path', ''))
                 self.central_layout.addWidget(self.results_widget)
+
+                # Chargement initial critique - s'assurer que la page 0 contient des données
+                if hasattr(self.results_widget.model, '_loaded_data'):
+                    self.results_widget.model._loaded_data[0] = data_batch
+                    self.results_widget.model._total_rows = len(data_batch)
+                    logging.debug(f"Initialisation modèle: {len(data_batch)} lignes dans page 0")
                     
                 # Create model with first batch
                 model = DataTableManager.populate_table(

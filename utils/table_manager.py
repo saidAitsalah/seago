@@ -16,33 +16,6 @@ import traceback
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-COLUMN_CONFIG = {
-    "main": {
-        "Length": 50, "COG": 50, "Enzyme": 80,
-        "Classification": 80, "Protein ID": 130,
-        "Description": 250, "InterPro": 100,
-        "Preferred name": 100
-    },
-    "blast": {
-        "hit_id": 100, "percent_identity": 120
-    }
-}
-
-MAIN_HEADERS = [
-    "Protein ID", "Description", "Length", "Results",
-    "PFAMs", "GO", "Classification",
-    "Preferred name", "COG", "Enzyme", "InterPro"
-]
-
-BLAST_HEADERS = [
-    "Hit id", "Definition", "Accession", "Identity", 
-    "Alignment length", "E-value", "Bit-score",
-    "QStart", "QEnd", "sStart", "sEnd", "Hsp bit score"
-]
-
-INTERPRO_HEADERS = [
-    "InterPro ID", "Description", "Start", "End", "E-value"
-]
 
 
 class DataTableManager:
@@ -99,6 +72,36 @@ class DataTableManager:
             "Preferred name": 100
         }
     }
+    COLUMN_CONFIG = {
+    "main": {
+        "Length": 50, "COG": 50, "Enzyme": 80,
+        "Classification": 80, "Protein ID": 130,
+        "Description": 250, "InterPro": 100,
+        "Preferred name": 100
+    },
+   "blast": {
+        "Hit ID": 100, "Identity (%)": 120, 
+        "Definition": 200, "Accession": 120, "Alignment Length": 120,
+        "E-value": 100, "Bit-score": 100, "Query Start": 80, "Query End": 80,
+        "Subject Start": 80, "Subject End": 80, "HSP Bit-score": 100
+    }
+    }
+
+    MAIN_HEADERS = [
+        "Protein ID", "Description", "Length", "Results",
+        "PFAMs", "GO", "Classification",
+        "Preferred name", "COG", "Enzyme", "InterPro"
+    ]
+
+    BLAST_HEADERS = [
+        "Hit ID", "Definition", "Accession", "Identity (%)", "Alignment Length", "E-value", "Bit-score",
+                "Query Start", "Query End", "Subject Start", "Subject End", "HSP Bit-score"
+    ]
+
+    INTERPRO_HEADERS = [
+        "InterPro ID", "Description", "Start", "End", "E-value"
+    ]
+
 
     @staticmethod
     def process_batch(items, go_definitions=None):
@@ -441,6 +444,7 @@ class DataTableManager:
         column_name_to_index = {}
         for i in range(table.columnCount()):
             header_item = table.horizontalHeaderItem(i)
+            #logging.debug(f"Setting headers on BLAST table: {header_item}")
             if header_item is not None:  # Important check!
                 header_text = header_item.text()
                 column_name_to_index[header_text] = i
@@ -602,6 +606,9 @@ class DataTableManager:
             # Configuration
             table.setRowCount(len(all_hits))
             table.clearContents()
+
+            # AJOUTER CETTE LIGNE - Définir les en-têtes AVANT d'appliquer la config
+            table.setHorizontalHeaderLabels(DataTableManager.BLAST_HEADERS)
             
             # Peuplement optimisé
             for batch in DataTableManager._batch_process(enumerate(all_hits)):
@@ -637,7 +644,9 @@ class DataTableManager:
                             table.setCellWidget(row_idx, col_idx, progress)
                         else:
                             table.setItem(row_idx, col_idx, DataTableManager._create_table_item(value))
-
+            # Add this before calling _apply_table_config
+            logging.debug(f"Table column count before config: {table.columnCount()}")
+            logging.debug(f"Headers before config: {[table.horizontalHeaderItem(i).text() if table.horizontalHeaderItem(i) else 'None' for i in range(table.columnCount())]}")
             # Configuration finale
             DataTableManager._apply_table_config(table, 'blast')
 
@@ -1095,3 +1104,13 @@ class DataTableManager:
                     
         except Exception as e:
             logging.error(f"Error updating widget: {str(e)}")
+   
+
+    @staticmethod
+    def style_IprscanTable_headers(table: QTableWidget):
+        """Apply styles to table headers."""
+        header = table.horizontalHeader()
+        header.setStyleSheet(DataTableManager.HEADER_STYLE)
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        table.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)  
+        

@@ -1,16 +1,17 @@
 from PySide6.QtWidgets import (
-    QMainWindow, QScrollArea, QSplitter,
+    QMainWindow, QScrollArea, QSplitter,QSpinBox,QDockWidget,
     QVBoxLayout, QGroupBox, QLabel, QHBoxLayout, QLineEdit, QPushButton,
-    QWidget, QGraphicsDropShadowEffect, QMenuBar, 
-    QMessageBox, QDialog, QStatusBar, QTabWidget, QComboBox,QHeaderView,QTableView, QProgressBar
+    QWidget, QGraphicsDropShadowEffect, QMenuBar, QInputDialog,
+    QMessageBox, QDialog,QFileDialog, QStatusBar, QTabWidget,QTableWidgetItem, QComboBox,QHeaderView,QTableView, QProgressBar,QTableWidget, QTextEdit
 )
 from PySide6 import QtWidgets
 from PySide6.QtGui import (
-    QAction, QIcon,QColor, QKeySequence, QShortcut
+    QAction, QIcon,QColor, QKeySequence, QShortcut,QFont, QPainter
 )
 from PySide6.QtCore import (
-    Qt, QTimer, QModelIndex, Signal,
+    Qt, QTimer, QModelIndex, Signal,QItemSelectionModel
 )
+from PySide6.QtCharts import QChart, QChartView, QPieSeries 
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from pyvis.network import Network
 import os
@@ -25,13 +26,15 @@ from model.data_model import MAIN_HEADERS
 from utils.loading.StreamingJsonLoader import StreamingJsonLoader
 from utils.Debugging.TableDebugger import TableDebugger
 from ui.FilterManager import FilterManager
+import datetime
+import json
 
 
 logging.basicConfig(level=logging.DEBUG)
 
 class DynamicTableWindow(QMainWindow):
     data_loaded = Signal()
-    request_more_data = Signal(int)  # Signal emitted when we need more data
+    request_more_data = Signal(int)  
 
     def __init__(self, parsed_results, file_path, config=None):
         super().__init__()
@@ -42,6 +45,11 @@ class DynamicTableWindow(QMainWindow):
         self.detail_tabs = {}
         self.loader_thread = None  # Initialize loader_thread
         self.large_data_handler = None  # Initialize large_data_handler
+        self.modified_rows = set()  # Set of row indices that have been modified
+        self.original_values = {}   # Dictionary to store original values {(row, col): original_value}
+        self.change_log = []        # List to store all changes for audit/export
+        self._processing_data_change = False  
+
         self.load_config()
         self.init_ui()
 
@@ -76,6 +84,20 @@ class DynamicTableWindow(QMainWindow):
 
         self.create_menu_bar()
         self.create_tab_system()
+        self.create_tabs(self.parsed_results)  
+        self.add_debug_panel()
+        #self.add_debug2_panel()
+
+
+        # Add Export with Changes to File menu
+        if hasattr(self.model, 'dataChanged'):
+            self.model.dataChanged.connect(self.on_data_changed) 
+
+        self.table.setEditTriggers(QTableView.DoubleClicked | QTableView.EditKeyPressed)
+        self.table.setTabKeyNavigation(True)
+        self.table.doubleClicked.connect(self.handle_cell_double_clicked)
+        
+
         self.create_status_bar()
  
         self.connect_signals()
@@ -95,8 +117,358 @@ class DynamicTableWindow(QMainWindow):
         self.table.verticalScrollBar().valueChanged.connect(self.on_scroll_change)
         
         # Show pagination debug info in status bar
-        self.status_bar.showMessage("Press F3 to force refresh filter if results don't update correctly")
-        self.status_bar.showMessage("Press F5 to reveal pagination controls if they're hidden")
+        #self.status_bar.showMessage("Press F3 to force refresh filter if results don't update correctly")
+        #self.status_bar.showMessage("Press F5 to reveal pagination controls if they're hidden")
+
+        """    # Add a change tracking indicator to the status bar
+        self.change_indicator = QLabel("No changes")
+        self.statusBar().addPermanentWidget(self.change_indicator) """
+
+        QTimer.singleShot(3000, lambda: self.force_selection_with_retry(0))
+
+    def handle_cell_double_clicked(self, index):
+        self.force_edit_cell(index.row(), index.column())    
+
+    def add_debug2_panel(self):
+        """Add debug panel to help diagnose issues"""
+        debug_dock = QDockWidget("Debug Tools", self)
+        debug_widget = QWidget()
+        debug_layout = QVBoxLayout(debug_widget)
+        
+        # Add direct edit test
+        edit_test_group = QGroupBox("Direct Edit Test")
+        edit_layout = QHBoxLayout()
+        edit_test_group.setLayout(edit_layout)
+        
+        # Row and column inputs
+        row_input = QSpinBox()
+        row_input.setMinimum(0)
+        row_input.setMaximum(100)
+        col_input = QSpinBox()
+        col_input.setMinimum(0)
+        col_input.setMaximum(10)
+        
+        # Button to trigger edit
+        test_edit_button = QPushButton("Test Edit")
+        test_edit_button.clicked.connect(lambda: self.force_edit_cell(row_input.value(), col_input.value()))
+        
+        # Arrange layout
+        edit_layout.addWidget(QLabel("Row:"))
+        edit_layout.addWidget(row_input)
+        edit_layout.addWidget(QLabel("Col:"))
+        edit_layout.addWidget(col_input)
+        edit_layout.addWidget(test_edit_button)
+        
+        # Add to debug panel
+        debug_layout.addWidget(edit_test_group)
+        
+        # Set widget and add dock
+        debug_dock.setWidget(debug_widget)
+        self.addDockWidget(Qt.RightDockWidgetArea, debug_dock)
+
+    def force_edit_cell(self, row, col):
+        """Force an edit operation on a specific cell"""
+        try:
+            # Create index for the cell
+            source_model = self.model
+            proxy_model = self.proxy_model
+            
+            # Convert from table coordinates to source model coordinates
+            if hasattr(proxy_model, 'mapToSource'):
+                proxy_index = proxy_model.index(row, col)
+                source_index = proxy_model.mapToSource(proxy_index)
+                source_row = source_index.row()
+                source_col = source_index.column()
+            else:
+                source_row = row
+                source_col = col
+                
+            logging.debug(f"Forcing edit on cell: table({row},{col}) -> source({source_row},{source_col})")
+            
+            # Get the current value
+            current_value = self.table.model().index(row, col).data()
+            logging.debug(f"Current value: {current_value}")
+            
+            # Create a simple edit dialog
+            new_value, ok = QInputDialog.getText(
+                self, "Edit Cell Value", 
+                f"Edit value for cell ({row}, {col}):",
+                text=str(current_value) if current_value else ""
+            )
+            
+            if ok and new_value:
+                # Apply the edit directly to the model (bypass delegate)
+                result = self.table.model().setData(
+                    self.table.model().index(row, col), 
+                    new_value, 
+                    Qt.EditRole
+                )
+                logging.debug(f"Edit result: {result}")
+                
+                # Trigger update if needed
+                if result:
+                    try:
+                        # Try to update visuals - CRITICAL: Wrap this in try/except
+                        self._highlight_modified_row(row)
+                        
+                        # Safely update status indicator if it exists
+                        if hasattr(self, 'change_indicator') and self.change_indicator is not None:
+                            try:
+                                self.change_indicator.setText(f"  Cell ({row}, {col}) modified *")
+                                self.change_indicator.setStyleSheet("color: white; font-weight: bold;")
+                            except Exception as ui_err:
+                                logging.error(f"UI update error: {ui_err}")
+                        else:
+                            # Fallback to status bar
+                            self.statusBar().showMessage(f"  Cell ({row},{col}) modified *")
+                            
+                    except Exception as highlight_err:
+                        logging.error(f"Error highlighting modified row: {highlight_err}")
+                        # Continue even if highlighting fails
+                        self.statusBar().showMessage(f"Cell modified but couldn't highlight row: {str(highlight_err)}")
+        except Exception as e:
+            logging.error(f"Error forcing edit: {e}")
+            traceback.print_exc()
+    
+    
+    def on_data_changed(self, topLeft, bottomRight, roles=None):
+        """Handle when data in the model changes"""
+        if self._processing_data_change:
+            return
+        try:
+            self._processing_data_change = True 
+            # Initialize modified collections if they don't exist
+            if not hasattr(self, 'modified_rows'):
+                self.modified_rows = set()
+                
+            if not hasattr(self, 'original_values'):
+                self.original_values = {}
+                
+            if not hasattr(self, 'change_log'):
+                self.change_log = []
+            
+            # Process each changed cell
+            for row in range(topLeft.row(), bottomRight.row() + 1):
+                for col in range(topLeft.column(), bottomRight.column() + 1):
+                    # Track the change
+                    self.modified_rows.add(row)
+                    
+                    # Get column name and values for logging
+                    model = self.table.model()
+                    index = model.index(row, col)
+                    column_name = model.headerData(col, Qt.Horizontal, Qt.DisplayRole) 
+                    current_value = model.data(index, Qt.DisplayRole)
+                    
+                    # Add to change log with timestamp
+                    import datetime
+                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self.change_log.append({
+                        'timestamp': timestamp,
+                        'row': row,
+                        'column': column_name,
+                        'original_value': self.original_values.get((row, col), ""),
+                        'new_value': current_value
+                    })
+                    
+                    # Update UI safely
+                    if hasattr(self, '_highlight_modified_row'):
+                        self._highlight_modified_row(row)
+                    
+                    # Update status indicator if it exists
+                    if hasattr(self, 'change_indicator'):
+                        self.change_indicator.setText(f"{len(self.modified_rows)} rows modified")
+                        self.change_indicator.setStyleSheet("color: red; font-weight: bold;")
+                    else:
+                        # Use status bar directly if no indicator
+                        self.statusBar().showMessage(f"Cell ({row},{col}) modified")
+                        
+                    logging.debug(f"Processed change for row {row}, col {col}")
+                    
+        except Exception as e:
+            logging.error(f"Error handling data change: {str(e)}")
+            traceback.print_exc()
+        finally:
+        # Always reset the flag when done
+            self._processing_data_change = False    
+
+
+    def _highlight_modified_row(self, row):
+        """Highlight a modified row in a QTableView"""
+        try:
+            logging.debug(f"Highlighting modified row {row}")
+            
+            # Get the actual source model (not proxy)
+            source_model = self.model
+            while hasattr(source_model, 'sourceModel') and source_model.sourceModel():
+                source_model = source_model.sourceModel()
+            
+            # Add row to highlighted set in the source model
+            if not hasattr(source_model, '_highlighted_rows'):
+                source_model._highlighted_rows = set()
+            
+            # Map the view row to source row
+            source_row = row
+            proxy = self.table.model()
+            if hasattr(proxy, 'mapRowToSource'):
+                mapped_row = proxy.mapRowToSource(row)
+                if mapped_row != -1:
+                    source_row = mapped_row
+                    logging.debug(f"Mapped view row {row} to source row {source_row}")
+            
+            # Add to the source model's highlighted rows set
+            source_model._highlighted_rows.add(source_row)
+            logging.debug(f"Added source row {source_row} to _highlighted_rows")
+            
+            # Force a refresh of the entire row in the view
+            self.table.update(self.table.model().index(row, 0))
+            self.table.update(self.table.model().index(row, self.table.model().columnCount()-1))
+            self.table.viewport().update()
+            
+        except Exception as e:
+            logging.error(f"Error in _highlight_modified_row: {e}")
+            traceback.print_exc()
+
+
+    def on_export_with_changes(self):
+        """Handle export with changes action"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Data with Change Tracking", "", "JSON Files (*.json)"
+        )
+        
+        if file_path:
+            self.export_data_with_changes(file_path)    
+
+
+    def on_item_changed(self, item):
+        """Handle when a cell value is changed by the user"""
+        try:
+            row = item.row()
+            col = item.column()
+            current_value = item.text()
+            
+            # Get column name
+            column_name = self.table.horizontalHeaderItem(col).text() if self.table.horizontalHeaderItem(col) else f"Column {col}"
+            
+            # Store original value if this is the first edit for this cell
+            if (row, col) not in self.original_values:
+                # Try to get the original value from the data model
+                if hasattr(self.model, '_loaded_data'):
+                    page = row // self.model.PAGE_SIZE
+                    page_index = row % self.model.PAGE_SIZE
+                    
+                    if page in self.model._loaded_data and page_index < len(self.model._loaded_data[page]):
+                        item_data = self.model._loaded_data[page][page_index]
+                        # This depends on how your data is structured
+                        # You may need to adjust this to get the correct original value
+                        if hasattr(self.model, 'headerData'):
+                            field_name = self.model.headerData(col, Qt.Horizontal, Qt.DisplayRole)
+                            if field_name in item_data:
+                                self.original_values[(row, col)] = str(item_data[field_name])
+                                logging.error(f"on_item_changed called with {type(item).__name__}, but we have a QTableView")
+
+                        else:
+                            # Fallback if we can't determine the original value
+                            self.original_values[(row, col)] = "Unknown"
+                else:
+                    # If we can't get from model, use empty string as original
+                    self.original_values[(row, col)] = ""
+            
+            # Add row to the modified set
+            self.modified_rows.add(row)
+            
+            # Add to change log
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.change_log.append({
+                'timestamp': timestamp,
+                'row': row,
+                'column': column_name, 
+                'original_value': self.original_values.get((row, col), ""),
+                'new_value': current_value
+            })
+            
+            # Highlight the modified row
+            self.highlight_modified_row(row)
+            
+            # Update status bar to show number of modified rows
+            self.statusBar().showMessage(f"{len(self.modified_rows)} rows modified")
+            self.change_indicator.setText(f"{len(self.modified_rows)} rows modified")
+
+            self.change_indicator.setStyleSheet("color: red; font-weight: bold;")
+            
+        except Exception as e:
+            logging.error(f"Error tracking item change: {e}")
+            traceback.print_exc()    
+        
+
+    def debug_force_first_selection(self):
+        """Force la sélection du premier élément pour déboguer"""
+        logging.debug("Tentative de sélection forcée pour déboguer")
+        self.force_selection(0)
+        
+        # Vérifier également si on a des données BLAST
+        if hasattr(self, 'model') and self.model:
+            page = 0
+            if page in self.model._loaded_data and len(self.model._loaded_data[page]) > 0:
+                item = self.model._loaded_data[page][0]
+                if 'display' in item and 'blast_hits' in item['display']:
+                    hits = item['display']['blast_hits']
+                    logging.debug(f"Premier élément contient {len(hits)} blast_hits")
+                    
+                    # Forcer la mise à jour du tab BLAST
+                    QTimer.singleShot(100, lambda: self.update_blast_tab(hits))    
+
+
+    def export_data_with_changes(self, file_path):
+        """Export data including change tracking information"""
+        try:
+            # First, prepare the main data
+            export_data = []
+            
+            # Loop through all rows
+            for row in range(self.table.model().rowCount()):
+                row_data = {}
+                
+                # Add column data
+                for col in range(self.table.model().columnCount()):
+                    header = self.table.horizontalHeaderItem(col).text()
+                    index = self.table.model().index(row, col)
+                    value = self.table.model().data(index, Qt.DisplayRole)
+                    row_data[header] = value
+                
+                # Mark row as modified if it's in our tracking set
+                row_data['_modified'] = row in self.modified_rows
+                
+                # Add to export data
+                export_data.append(row_data)
+            
+            # Create the export object
+            full_export = {
+                'data': export_data,
+                'change_log': self.change_log,
+                'export_date': datetime.datetime.now().isoformat(),
+                'modified_rows_count': len(self.modified_rows)
+            }
+            
+            # Write to file
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(full_export, f, indent=2, ensure_ascii=False)
+                
+            self.statusBar().showMessage(f"Data exported with change tracking to {file_path}")
+            return True
+                
+        except Exception as e:
+            logging.error(f"Error exporting data with changes: {e}")
+            traceback.print_exc()
+            self.statusBar().showMessage(f"Error exporting data: {str(e)}")
+            return False                
+
+    """     def highlight_modified_row(self, row):
+            for col in range(self.table.columnCount()):
+                item = self.table.item(row, col)
+                if item:
+                    # Set yellow background to indicate modified
+                    item.setBackground(QColor(255, 255, 200))  # Light yellow    """             
+
 
     def _check_memory_usage(self):
         """Monitor memory usage and clean up if necessary"""
@@ -184,14 +556,69 @@ class DynamicTableWindow(QMainWindow):
         self.refresh_filter_shortcut = QShortcut(QKeySequence("F3"), self)
         self.refresh_filter_shortcut.activated.connect(lambda: self.filter_manager.force_refresh_filter())     
             
-    
+    def force_selection_with_retry(self, row=0, retry_count=0, max_retries=10):
+        """Force selection with retry mechanism that waits for data to be loaded"""
+        try:
+            if retry_count >= max_retries:
+                logging.debug(f"Abandon après {retry_count} tentatives")
+                return
+                
+            # Vérifier si le modèle existe et a des données
+            if not self.table.model() or self.table.model().rowCount() == 0:
+                logging.debug("Modèle pas prêt, nouvelle tentative dans 1 seconde...")
+                QTimer.singleShot(1000, lambda: self.force_selection_with_retry(row, retry_count + 1))
+                return
+                
+            # Vérifier si la page nécessaire est chargée
+            page = row // VirtualTableModel.PAGE_SIZE
+            if not hasattr(self.model, '_loaded_data') or page not in self.model._loaded_data:
+                logging.debug(f"Page {page} non chargée, chargement en cours...")
+                # Charger la page explicitement et réessayer plus tard
+                try:
+                    self.model.current_page = page
+                    # Appel à _load_page modifié
+                    if hasattr(self.model, '_load_page'):
+                        self.model._load_page(page)
+                    QTimer.singleShot(1500, lambda: self.force_selection_with_retry(row, retry_count + 1))
+                except Exception as e:
+                    logging.error(f"Erreur lors du chargement de la page: {e}")
+                    traceback.print_exc()
+                    # Réessayer quand même
+                    QTimer.singleShot(3000, lambda: self.force_selection_with_retry(row, retry_count + 1))
+                return
+                
+            # La page est chargée, on peut sélectionner
+            logging.debug(f"Page {page} chargée, sélection de la ligne {row}")
+            
+            # Sélectionner la ligne avec les bons paramètres
+            index = self.table.model().index(row, 0)
+            self.table.selectionModel().select(
+                index, 
+                QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows
+            )
+            self.table.setCurrentIndex(index)
+            
+            # Assurer la visibilité de la ligne sélectionnée
+            self.table.scrollTo(index)
+            
+            # Appeler le gestionnaire manuellement
+            self.handle_row_selection(row)
+            
+            return True  # Succès
+        except Exception as e:
+            logging.error(f"Erreur pendant la sélection: {e}")
+            traceback.print_exc()
+            # Réessayer
+            QTimer.singleShot(2000, lambda: self.force_selection_with_retry(row, retry_count + 1))
+            return False
+
     def create_main_table(self):
         """Create and configure main table with virtual model"""
         self.table = QTableView()
         self.table_group_box = QGroupBox("")
 
         # Set up virtual model
-        self.model = VirtualTableModel(self.parsed_results, self.go_definitions)
+        self.model = VirtualTableModel(self.parsed_results, self.go_definitions,self)
         #self.table.setModel(self.model)
 
         from model.data_model import WidgetDelegate
@@ -232,6 +659,34 @@ class DynamicTableWindow(QMainWindow):
 
         self.create_pagination_controls(layout)
         self.table_group_box.setLayout(layout)
+
+        self.table.setSelectionBehavior(QTableView.SelectRows)
+        self.table.setSelectionMode(QTableView.SingleSelection)
+
+        self.table.setStyleSheet("""
+        QTableView {
+            alternate-background-color: #F0F0F0;
+            background-color: white;
+            selection-background-color: #0078D7;
+            selection-color: white;
+        }
+        
+        /* This is the critical part that makes highlights visible */
+        QTableView::item { 
+            border: none;
+            background-color: transparent;
+        }
+        
+        /* This ensures selected cells don't hide your highlights */
+        QTableView::item:selected {
+            color: white;
+            background-color: rgba(0, 120, 215, 180);
+        }
+        """)
+        
+        # Ensure background colors from the model are shown
+        self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(True)
 
     def open_dialog(self):
             dialog = QDialog()
@@ -440,9 +895,28 @@ class DynamicTableWindow(QMainWindow):
             self.status_bar = QStatusBar()
             self.setStatusBar(self.status_bar)
 
-            # Row count label
-            #self.row_count_label = QLabel(self.row_count_label)
-            #self.status_bar.addPermanentWidget(self.row_count_label)
+            self.change_indicator = QLabel()
+            
+            # Create icon pixmap
+            icon = QIcon("./assets/branch.png")  # Replace with your icon path
+            if not icon.isNull():
+                # Save the pixmap for later use
+                self.edit_icon_pixmap = icon.pixmap(16, 16)
+                
+                # Save icon to temporary file for HTML embedding
+                temp_icon_path = "./assets/temp_icon.png"
+                self.edit_icon_pixmap.save(temp_icon_path, "PNG")
+                
+                # Set HTML text with embedded image
+                self.change_indicator.setText(
+                    f'<img src="{temp_icon_path}" width="16" height="16" style="vertical-align: middle"> No changes'
+                )
+            else:
+                # Fallback if icon not found
+                self.change_indicator.setText("✏️ No changes")
+            
+            # Add to status bar
+            self.status_bar.addWidget(self.change_indicator)
 
             # Clock
             self.clock_label = QLabel()
@@ -470,13 +944,311 @@ class DynamicTableWindow(QMainWindow):
                     border-top: 2px solid #86BBD8;
                 }
                 QLabel {
-                    color: #93FF96;
+                    color: white;
                     font-weight: bold;
                     font-size: 12px;
                 }
             """)
+            #93FF96
 
 
+    def create_tabs(self, parsed_results):
+        """tabs for hits, graphs, metadata .."""
+        #self.tabs.addTab(self.create_tables_tab(parsed_results), "Hits")
+        self.tabs.addTab(self.create_Iprscan_tab(parsed_results), "Domains")
+        self.tabs.addTab(self.create_details_tab(), "Details")
+        self.tabs.addTab(self.create_GO_tab(), "GO")
+        self.tabs.addTab(self.create_graphs_tab(), "Donut")
+        self.tabs.addTab(self.create_chart_tab(), "Chart")
+        self.tabs.addTab(self.create_MetaD_tab(), "Metadata")
+        # Set tab styling
+        self.tabs.setStyleSheet("""
+            QTabBar::tab {
+                color: #333333;
+                font : Lato;
+                font-weight: bold;
+                font-size: 12px ;
+            }
+        """)
+
+    def update_blast_tab(self, blast_hits):
+        """
+        Update the BLAST hits tab with sequence alignment details from the selected item.
+        
+        Args:
+            blast_hits: List of BLAST hit dictionaries containing alignment information
+        """
+        # If no blast hits tab exists yet, create one
+        if "BLAST" not in self.detail_tabs:
+            blast_tab = self.create_blast_tab(blast_hits)
+            self.tabs.addTab(blast_tab, "BLAST")
+            self.detail_tabs["BLAST"] = blast_tab
+            tab_index = self.tabs.count() - 1
+        else:
+            # Tab already exists, get its index and update it
+            for i in range(self.tabs.count()):
+                if self.tabs.tabText(i) == "BLAST":
+                    tab_index = i
+                    break
+        
+        # Define column headers for BLAST hits table
+        hits_table_column_headers = [
+            "Hit ID", "Definition", "Accession", "Identity (%)", "Alignment Length", "E-value", "Bit-score",
+            "Query Start", "Query End", "Subject Start", "Subject End", "HSP Bit-score"
+        ]
+        
+        # Get the table widget from the tab
+        if "BLAST" in self.detail_tabs and hasattr(self.detail_tabs["BLAST"], "findChild"):
+            # Find the table widget within the tab
+            table = self.detail_tabs["BLAST"].findChild(QTableWidget)
+            if not table:
+                # Create a new table if not found
+                table = QTableWidget()
+                table.setColumnCount(len(hits_table_column_headers))
+                table.setHorizontalHeaderLabels(hits_table_column_headers)
+                self.detail_tabs["BLAST"].layout().addWidget(table)
+        else:
+            # Create a new table if the tab doesn't exist or doesn't have findChild
+            table = QTableWidget()
+            table.setColumnCount(len(hits_table_column_headers))
+            table.setHorizontalHeaderLabels(hits_table_column_headers)
+        
+        # Set row count based on number of hits
+        total_hits = len(blast_hits)
+        table.setRowCount(total_hits)
+        logging.debug(f"Updating BLAST tab with {total_hits} hits")
+        
+        # Populate the table row by row
+        for row_idx, hit in enumerate(blast_hits):
+            # Extract data with safe defaults
+            query_start = hit.get("query_positions", {}).get("start", "N/A")
+            query_end = hit.get("query_positions", {}).get("end", "N/A")
+            subject_start = hit.get("subject_positions", {}).get("start", "N/A")
+            subject_end = hit.get("subject_positions", {}).get("end", "N/A")
+            hit_accession = hit.get("accession", "N/A")
+            hit_definition = hit.get("hit_def", "N/A")
+            
+            # Get first HSP bit score or default
+            hsps = hit.get("hsps", [{}])
+            hsp_bit_score = hsps[0].get("bit_score", "N/A") if hsps else "N/A"
+            
+            # Calculate identity percentage with safe conversion
+            alignment_length = hit.get("alignment_length", 1)
+            if alignment_length == 0:
+                alignment_length = 1  # Prevent division by zero
+                
+            percent_identity = hit.get("percent_identity", 0)
+            try:
+                identity = (float(percent_identity) / float(alignment_length)) * 100
+                identity = min(100, max(0, identity))  # Ensure it's between 0-100
+            except (ValueError, TypeError):
+                identity = 0
+            
+            # Row data, matching the number of columns
+            row_data = [
+                hit.get("hit_id", ""),       # Hit ID
+                hit_definition,              # Definition
+                hit_accession,               # Accession
+                identity,                    # Identity percentage
+                alignment_length,            # Alignment length
+                hit.get("e_value", "N/A"),   # E-value
+                hit.get("bit_score", "N/A"), # Bit-score
+                query_start,                 # Query Start
+                query_end,                   # Query End
+                subject_start,               # Subject Start
+                subject_end,                 # Subject End
+                hsp_bit_score                # HSP bit score
+            ]
+            
+            # Add data to the table
+            for col_idx, value in enumerate(row_data):
+                if col_idx == 3:  # Identity column with progress bar
+                    progress = QProgressBar()
+                    try:
+                        progress.setValue(int(identity))
+                    except (ValueError, TypeError):
+                        progress.setValue(0)
+                        
+                    progress.setAlignment(Qt.AlignCenter)
+                    
+                    # Color coding based on identity percentage
+                    if int(identity) > 90:
+                        progress.setStyleSheet("QProgressBar::chunk {background-color: #8FE388;}")
+                    elif int(identity) < 70:
+                        progress.setStyleSheet("QProgressBar::chunk {background-color: #E3AE88;}")
+                    else:
+                        progress.setStyleSheet("QProgressBar::chunk {background-color: #88BCE3;}")
+                        
+                    table.setCellWidget(row_idx, col_idx, progress)
+                else:
+                    item = QTableWidgetItem(str(value))
+                    table.setItem(row_idx, col_idx, item)
+        
+        # Set column widths for better readability
+        column_widths = {
+            0: 120,  # Hit ID
+            1: 200,  # Definition
+            2: 120,  # Accession
+            3: 100,  # Identity
+            4: 120,  # Alignment length
+            5: 100,  # E-value
+            6: 100,  # Bit-score
+            7: 80,   # Query Start
+            8: 80,   # Query End
+            9: 80,   # Subject Start
+            10: 80,  # Subject End
+            11: 100  # HSP bit score
+        }
+        
+        for col, width in column_widths.items():
+            table.setColumnWidth(col, width)
+        
+        # Show the BLAST tab
+        self.tabs.setCurrentIndex(tab_index)
+        
+        # Add summary information at the bottom if many hits
+        if total_hits > 10:
+            summary_label = QLabel(f"Showing {total_hits} BLAST hits. Top hits are most significant.")
+            summary_label.setStyleSheet("color: #555; font-style: italic;")
+            if self.detail_tabs["BLAST"].layout().count() == 1:  # Only the table exists
+                self.detail_tabs["BLAST"].layout().addWidget(summary_label)    
+
+    def create_details_tab(self):
+        """Create a details tab with a text area for displaying annotation details"""
+        self.description_widget = QTextEdit()
+        self.description_widget.setReadOnly(True)
+        self.description_widget.setPlaceholderText("Select a cell to view annotation details...")
+        
+        tab_details = QWidget()
+        tab_details_layout = QVBoxLayout()
+        tab_details_layout.addWidget(self.description_widget)
+        tab_details.setLayout(tab_details_layout)
+        
+        return tab_details
+
+    def create_MetaD_tab(self):
+        """Create a metadata tab for displaying dataset metadata"""
+        description_widget = QLabel("Metadata will be displayed here...")
+        description_widget.setAlignment(Qt.AlignCenter)
+        
+        tab_metadata = QWidget()
+        tab_metadata_layout = QVBoxLayout()
+        tab_metadata_layout.addWidget(description_widget)
+        tab_metadata.setLayout(tab_metadata_layout)
+        
+        return tab_metadata
+
+    def create_graphs_tab(self):
+        """Create a donut chart visualization tab"""
+        donut_chart_widget = Widget() 
+        donut_chart_widget.setMinimumSize(600, 600) 
+        donut_chart_widget.setMaximumSize(900, 600) 
+
+        # Create a scroll area for the chart
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(donut_chart_widget)  
+        scroll_area.setWidgetResizable(True) 
+
+        tab_graphs = QWidget()
+        tab_graphs_layout = QVBoxLayout()
+
+        scroll_layout = QHBoxLayout()
+        scroll_layout.addWidget(scroll_area)  
+        
+        tab_graphs_layout.addLayout(scroll_layout)  
+        tab_graphs.setLayout(tab_graphs_layout)
+        tab_graphs.setMinimumSize(800, 300)  
+    
+        return tab_graphs
+
+    def create_chart_tab(self):
+        """Create a pie chart visualization of query distribution"""
+        chart = QChart() 
+        series = QPieSeries()
+
+        series.append("With Blast Hits", 60)
+        series.append("With GO Mapping", 20)
+        series.append("Manually Annotated", 10)
+        series.append("Blasted Without hits", 10)
+
+        chart.addSeries(series)
+        chart.setTitle("Query distribution")
+        
+        # Set chart styling
+        chart.setTitleBrush(QColor("#4F518C")) 
+        chart.setTitleFont(QFont("Roboto", 14, QFont.Bold)) 
+
+        # Set slice colors
+        series.slices()[0].setBrush(QColor("#077187")) 
+        series.slices()[1].setBrush(QColor("#4F518C")) 
+        series.slices()[2].setBrush(QColor("#ED7D3A"))  
+        series.slices()[3].setBrush(QColor("#D0D0D0"))  
+
+        chart_view = QChartView(chart)
+        chart_view.setRenderHint(QPainter.Antialiasing)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(chart_view)
+        scroll_area.setWidgetResizable(True)
+
+        tab_graphs = QWidget()
+        tab_graphs_layout = QVBoxLayout()
+
+        scroll_layout = QHBoxLayout()
+        scroll_layout.addWidget(scroll_area)
+
+        tab_graphs_layout.addLayout(scroll_layout)
+        tab_graphs_layout.setContentsMargins(10, 10, 10, 10)  
+        tab_graphs_layout.setSpacing(10) 
+        tab_graphs.setLayout(tab_graphs_layout)
+
+        return tab_graphs
+
+    def create_tables_tab(self, parsed_results):
+        """Create a table showing hit results"""
+        self.additional_table = QTableWidget()
+        DataTableManager.style_AdditionalTable_headers(self.additional_table)
+        self.additional_table.setColumnCount(12)
+        DataTableManager.populate_additional_table(self.additional_table, parsed_results)
+
+        tab_tables = QWidget()
+        tab_tables_layout = QVBoxLayout()
+        tab_tables_layout.addWidget(self.additional_table)
+        tab_tables.setLayout(tab_tables_layout)
+
+        return tab_tables
+
+    def create_Iprscan_tab(self, parsed_results):
+        """Create IPRscan Table tab"""
+        self.Iprsca_table = QTableWidget()
+        DataTableManager.style_IprscanTable_headers(self.Iprsca_table)
+        self.Iprsca_table.setColumnCount(12)
+        DataTableManager.populate_interproscan_table(self.Iprsca_table, parsed_results)
+
+        tab_Iprscan = QWidget()
+        tab_Iprscan_layout = QVBoxLayout()
+        tab_Iprscan_layout.addWidget(self.Iprsca_table)
+        tab_Iprscan.setLayout(tab_Iprscan_layout)
+        return tab_Iprscan
+            
+    def create_GO_tab(self):
+        """Create a Gene Ontology terms table tab"""
+        obo_file_path = "./ontologies/go-basic.obo"  # TO-DO: move to config.json
+        
+        go_data = obo.load_go_terms(obo_file_path)
+        self.GO_table = QTableWidget()
+        DataTableManager.style_IprscanTable_headers(self.GO_table)
+        self.GO_table.setColumnCount(9)
+        DataTableManager.populate_GO_table(self.GO_table, go_data)
+
+        tab_go = QWidget()
+        tab_go_layout = QVBoxLayout()
+        tab_go_layout.addWidget(self.GO_table)
+        tab_go.setLayout(tab_go_layout)
+        return tab_go    
+    
+    
+    
     def create_tab_system(self):
         """Initialize tab system with splitter"""
         self.tabs = QTabWidget()
@@ -499,36 +1271,196 @@ class DynamicTableWindow(QMainWindow):
     def on_selection_changed(self):
         """Handle table selection changes"""
         indexes = self.table.selectionModel().selectedIndexes()
+        logging.debug(f"Selection changed: {len(indexes)} indices sélectionnés")
+
         if indexes:
             row = indexes[0].row()
-            self.handle_row_selection(row)
+            column = indexes[0].column()
+            logging.debug(f"Sélection: ligne={row}, colonne={column}")
+            
+            # Vérifier la correspondance entre modèles
+            proxy_index = indexes[0]
+            if hasattr(self.table.model(), 'mapToSource'):
+                source_index = self.table.model().mapToSource(proxy_index)
+                logging.debug(f"Mappage: proxy({row},{column}) -> source({source_index.row()},{source_index.column()})")
+            
+            # Force update with additional logging
+            try:
+                # This will force debugging info for every selection
+                logging.debug(f"Forcing update for row {row}")
+                self.handle_row_selection(row)
+            except Exception as e:
+                logging.error(f"Error in selection changed: {e}")
+                traceback.print_exc()
+        else:
+            logging.debug("Aucune ligne sélectionnée")
 
     def handle_row_selection(self, row):
-        """Update detail views for selected row"""
-        page = row // VirtualTableModel.PAGE_SIZE
-        if page in self.model._loaded_data:
-            item_data = self.model._loaded_data[page][row % VirtualTableModel.PAGE_SIZE]
-            self.update_detail_tabs(item_data)
+        try:
+            # Obtain the proxy index
+            proxy_index = self.table.model().index(row, 0)
+            
+            # Map to the source model - FIX MAPPING ISSUE
+            if hasattr(self.table.model(), 'mapToSource'):
+                source_index = self.table.model().mapToSource(proxy_index)
+                source_row = source_index.row()
+            else:
+                source_row = row
+            
+            # Record this critical value
+            logging.debug(f"IMPORTANT - source_row = {source_row}")
+            
+            # Calculate page and index - ENSURE CORRECT VALUES
+            page_size = VirtualTableModel.PAGE_SIZE
+            page = source_row // page_size
+            page_index = source_row % page_size
+            
+            logging.debug(f"Selected row {row} maps to source_row={source_row} (page={page}, index={page_index})")
+            
+            # Ensure the page is loaded - FIX POTENTIAL RACE CONDITION
+            if (hasattr(self.model, '_loaded_data') and 
+                page not in self.model._loaded_data):
+                logging.debug(f"Page {page} not loaded, loading now...")
+                self.model._load_page(page)
+                # Give a small delay to ensure loading completes
+                QTimer.singleShot(50, lambda: self._continue_row_selection(source_row, page, page_index))
+                return
+            
+            # Continue with the loaded page
+            self._continue_row_selection(source_row, page, page_index)
+                
+        except Exception as e:
+            logging.error(f"Error handling row selection: {str(e)}")
+            traceback.print_exc()
+
+    def _continue_row_selection(self, source_row, page, page_index):
+        """Continue row selection after ensuring page is loaded"""
+        try:
+            # Extra check to ensure page is loaded
+            if not hasattr(self.model, '_loaded_data') or page not in self.model._loaded_data:
+                logging.error(f"Page {page} still not loaded after waiting!")
+                return
+                
+            # Get the item data
+            if page_index < len(self.model._loaded_data[page]):
+                item_data = self.model._loaded_data[page][page_index]
+                logging.debug(f"Item data found for row {source_row}, keys: {list(item_data.keys())}")
+                
+                # EXPLICITLY check for 'blast_hits' in the data 
+                if 'blast_hits' in item_data:
+                    logging.debug(f"Found {len(item_data['blast_hits'])} BLAST hits - updating tab...")
+                    # Update tabs - IMPORTANT: use refresh_blast_tab
+                    self.update_detail_tabs(item_data)
+                else:
+                    logging.debug(f"No blast_hits found in item_data!")
+                    # Clear the BLAST tab if it exists
+                    self.clear_blast_tab()
+            else:
+                logging.debug(f"Index {page_index} out of bounds for page {page}")
+        except Exception as e:
+            logging.error(f"Error in _continue_row_selection: {str(e)}")
+            traceback.print_exc()
+
+    def clear_blast_tab(self):
+        """Clear the BLAST tab if it exists"""
+        if "BLAST" in self.detail_tabs:
+            for i in range(self.tabs.count()):
+                if self.tabs.tabText(i) == "BLAST":
+                    self.tabs.removeTab(i)
+                    del self.detail_tabs["BLAST"]
+                    logging.debug("BLAST tab removed")
+                    break
+
+    def force_selection(self, row=0):
+        """Force selection of the specified row with proper error handling"""
+        try:
+            if self.table.model() and self.table.model().rowCount() > 0:
+                # Obtenir le vrai nombre de lignes
+                available_rows = self.table.model().rowCount()
+                if row < available_rows:
+                    logging.debug(f"Forcing selection of row {row}")
+                    index = self.table.model().index(row, 0)
+                    
+                    # Configurer la sélection
+                    self.table.setSelectionBehavior(QTableView.SelectRows)
+                    self.table.setSelectionMode(QTableView.SingleSelection)
+                    
+                    # Sélectionner la ligne
+                    self.table.selectionModel().select(
+                        index, 
+                        QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows
+                    )
+                    self.table.setCurrentIndex(index)
+                    
+                    # Appeler directement le gestionnaire
+                    self.handle_row_selection(row)
+                    
+                    # Scrroller pour voir la ligne sélectionnée
+                    self.table.scrollTo(index)
+                else:
+                    logging.debug(f"Cannot select row {row}: model has only {available_rows} rows")
+            else:
+                logging.debug("Cannot force selection: no model or empty model")
+        except Exception as e:
+            logging.error(f"Error forcing selection: {str(e)}")
+            traceback.print_exc()        
 
     def update_detail_tabs(self, item_data):
         """Update detail tabs with selected item data"""
-        # Update BLAST tab
-        if 'blast_hits' in item_data['display']:
-            self.update_blast_tab(item_data['display']['blast_hits'])
+        try:
+            # Log item structure for debugging
+            logging.debug(f"Updating tabs with item keys: {list(item_data.keys())}")
+            
+            # Update BLAST tab
+            if 'blast_hits' in item_data:
+                logging.debug(f"Found blast_hits: {len(item_data['blast_hits'])} hits")
+                self.refresh_blast_tab(item_data['blast_hits'])
+            else:
+                logging.debug("No blast_hits found in this item")
 
-        # Update InterPro tab
-        if 'InterPro' in item_data['display']:
-            self.update_interpro_tab(item_data['display']['InterPro'])
+            # Update InterPro tab (commented out in original)
+            if 'InterproScan_annotation' in item_data:
+                logging.debug(f"Found InterproScan data: {len(item_data['InterproScan_annotation'])}")
+                # Uncomment this when ready to implement
+                # self.update_interpro_tab(item_data['InterproScan_annotation'])
 
-        # Update GO tab
-        if 'GO' in item_data['display']:
-            self.update_go_tab(item_data['display']['GO'])
+            # Update Details text tab
+            if hasattr(self, 'description_widget'):
+                # Format details nicely
+                details = "<h3>Selected Item Details</h3><hr/>"
+                
+                # Access top-level keys directly instead of using 'display'
+                for key, value in item_data.items():
+                    if key not in ['blast_hits', 'InterproScan_annotation', 'eggNOG_annotations']:
+                        details += f"<p><b>{key}:</b> {value}</p>"
+                        
+                # Add eggNOG details separately if they exist
+                if 'eggNOG_annotations' in item_data and item_data['eggNOG_annotations']:
+                    details += "<h4>eggNOG Annotations</h4>"
+                    for annotation in item_data['eggNOG_annotations']:
+                        if isinstance(annotation, dict):
+                            for key, value in annotation.items():
+                                details += f"<p><b>{key}:</b> {value}</p>"
+                        
+                self.description_widget.setHtml(details)
+        except Exception as e:
+            logging.error(f"Error updating detail tabs: {str(e)}")
+            traceback.print_exc()
 
     def on_data_loaded(self):
         """Handle completed data loading"""
         self.progress_bar.hide()
         self.status_bar.showMessage("Data loaded successfully")
         self.update_row_count()
+
+        # Ajouter plus de logs
+        if self.table.model():
+            logging.debug(f"Modèle existe avec {self.table.model().rowCount()} lignes")
+        else:
+            logging.debug("Modèle n'existe pas!")
+
+        QTimer.singleShot(100, lambda: self.force_selection(0))
+
 
     def update_row_count(self):
         """Update status bar with row count and pagination info"""
@@ -674,9 +1606,149 @@ class DynamicTableWindow(QMainWindow):
 
     def create_blast_tab(self, data):
         """Create Blast results tab"""
-        table = DataTableManager.create_table('blast')
-        DataTableManager.populate_table(table, data, self.go_definitions)
-        return self.wrap_table_in_tab(table)
+        # Create the table with proper headers
+        table = QTableWidget()
+        table.setColumnCount(len(DataTableManager.BLAST_HEADERS))
+        table.setHorizontalHeaderLabels(DataTableManager.BLAST_HEADERS)
+        logging.debug(f"BLAST table column count after creation: {table.columnCount()}")
+
+        self.populate_blast_table(table, data)
+        
+        # Create and return a tab with the table
+        tab = QWidget()
+        layout = QVBoxLayout()
+        layout.addWidget(table)
+        tab.setLayout(layout)
+        return tab
+    
+    def refresh_blast_tab(self, blast_hits):
+        """Completely recreate the BLAST tab for the selected item"""
+        # First, check if the BLAST tab exists and remove it
+        if "BLAST" in self.detail_tabs:
+            for i in range(self.tabs.count()):
+                if self.tabs.tabText(i) == "BLAST":
+                    self.tabs.removeTab(i)
+                    del self.detail_tabs["BLAST"]
+                    break
+        
+        # Now create a new BLAST tab
+        blast_tab = self.create_blast_tab(blast_hits)
+        self.tabs.addTab(blast_tab, "BLAST")
+        self.detail_tabs["BLAST"] = blast_tab
+        
+        # Show the BLAST tab
+        for i in range(self.tabs.count()):
+            if self.tabs.tabText(i) == "BLAST":
+                self.tabs.setCurrentIndex(i)
+                break
+    
+    def populate_blast_table(self, table, blast_hits):
+        """
+        Populate a table with BLAST hit data
+        
+        Args:
+            table: QTableWidget to populate
+            blast_hits: List of BLAST hit dictionaries
+        """
+        # Set row count based on number of hits
+        total_hits = len(blast_hits)
+        table.setRowCount(total_hits)
+        logging.debug(f"Populating BLAST table with {total_hits} hits")
+           # DEBUG: Add this to check the first hit's structure
+        if total_hits > 0:
+            logging.debug(f"First BLAST hit keys: {list(blast_hits[0].keys())}")
+            logging.debug(f"First BLAST hit sample data: {blast_hits[0]}")
+
+
+        # Populate the table row by row
+        for row_idx, hit in enumerate(blast_hits):
+            # Extract data with safe defaults
+            query_start = hit.get("query_positions", {}).get("start", "N/A")
+            query_end = hit.get("query_positions", {}).get("end", "N/A")
+            subject_start = hit.get("subject_positions", {}).get("start", "N/A")
+            subject_end = hit.get("subject_positions", {}).get("end", "N/A")
+            hit_accession = hit.get("accession", "N/A")
+            hit_definition = hit.get("hit_def", "N/A")
+            
+            # Get first HSP bit score or default
+            hsps = hit.get("hsps", [{}])
+            hsp_bit_score = hsps[0].get("bit_score", "N/A") if hsps else "N/A"
+            
+            # Calculate identity percentage with safe conversion
+            alignment_length = hit.get("alignment_length", 1)
+            if alignment_length == 0:
+                alignment_length = 1  # Prevent division by zero
+                
+            percent_identity = hit.get("percent_identity", 0)
+            try:
+                identity = (float(percent_identity) / float(alignment_length)) * 100
+                identity = min(100, max(0, identity))  # Ensure it's between 0-100
+            except (ValueError, TypeError):
+                identity = 0
+            
+            # Row data, matching the number of columns
+            row_data = [
+                hit.get("hit_id", ""),       # Hit ID
+                hit_definition,              # Definition
+                hit_accession,               # Accession
+                identity,                    # Identity percentage
+                alignment_length,            # Alignment length
+                hit.get("e_value", "N/A"),   # E-value
+                hit.get("bit_score", "N/A"), # Bit-score
+                query_start,                 # Query Start
+                query_end,                   # Query End
+                subject_start,               # Subject Start
+                subject_end,                 # Subject End
+                hsp_bit_score                # HSP bit score
+            ]
+            
+            # Add data to the table
+            for col_idx, value in enumerate(row_data):
+                if col_idx == 3:  # Identity column with progress bar
+                    progress = QProgressBar()
+                    try:
+                        progress.setValue(int(identity))
+                    except (ValueError, TypeError):
+                        progress.setValue(0)
+                        
+                    progress.setAlignment(Qt.AlignCenter)
+                    
+                    # Color coding based on identity percentage
+                    if int(identity) > 90:
+                        progress.setStyleSheet("QProgressBar::chunk {background-color: #8FE388;}")
+                    elif int(identity) < 70:
+                        progress.setStyleSheet("QProgressBar::chunk {background-color: #E3AE88;}")
+                    else:
+                        progress.setStyleSheet("QProgressBar::chunk {background-color: #88BCE3;}")
+                        
+                    table.setCellWidget(row_idx, col_idx, progress)
+                else:
+                    item = QTableWidgetItem(str(value))
+                    table.setItem(row_idx, col_idx, item)
+        
+        # Set column widths for better readability
+        column_widths = {
+            0: 120,  # Hit ID
+            1: 200,  # Definition
+            2: 120,  # Accession
+            3: 100,  # Identity
+            4: 120,  # Alignment length
+            5: 100,  # E-value
+            6: 100,  # Bit-score
+            7: 80,   # Query Start
+            8: 80,   # Query End
+            9: 80,   # Subject Start
+            10: 80,  # Subject End
+            11: 100  # HSP bit score
+        }
+        
+        for col, width in column_widths.items():
+            table.setColumnWidth(col, width)
+        
+        # Add debug logging to check headers
+        logging.debug(f"BLAST table column count after populate: {table.columnCount()}")
+        headers = [table.horizontalHeaderItem(i).text() if table.horizontalHeaderItem(i) else "None" for i in range(table.columnCount())]
+        logging.debug(f"BLAST table headers: {headers}")
 
     def create_interpro_tab(self, data):
         """Create InterPro domains tab"""
@@ -777,6 +1849,60 @@ class DynamicTableWindow(QMainWindow):
         
     """*************************************************************************************************"""    
 
+    def add_debug_panel(self):
+        """Add debug panel with tools to diagnose BLAST tab updates"""
+        debug_dock = QDockWidget("BLAST Debug Panel", self)
+        debug_widget = QWidget()
+        debug_layout = QVBoxLayout(debug_widget)
+        
+        # Row selection tester
+        row_selection_group = QGroupBox("Test Row Selection")
+        row_layout = QHBoxLayout()
+        row_selection_group.setLayout(row_layout)
+        
+        row_input = QSpinBox()
+        row_input.setMinimum(0)
+        row_input.setMaximum(100)
+        row_layout.addWidget(QLabel("Row:"))
+        row_layout.addWidget(row_input)
+        
+        select_button = QPushButton("Select & Debug")
+        select_button.clicked.connect(lambda: self.debug_row_selection(row_input.value()))
+        row_layout.addWidget(select_button)
+        
+        debug_layout.addWidget(row_selection_group)
+        
+        # Direct BLAST update
+        blast_group = QGroupBox("Force BLAST Update")
+        blast_layout = QHBoxLayout()
+        blast_group.setLayout(blast_layout)
+        
+        row_blast = QSpinBox()
+        row_blast.setMinimum(0)
+        row_blast.setMaximum(100)
+        blast_layout.addWidget(QLabel("Row:"))
+        blast_layout.addWidget(row_blast)
+        
+        update_blast_button = QPushButton("Update BLAST")
+        update_blast_button.clicked.connect(lambda: self.debug_blast_update(row_blast.value()))
+        blast_layout.addWidget(update_blast_button)
+        
+        debug_layout.addWidget(blast_group)
+        
+        # Memory inspection
+        memory_button = QPushButton("Check Memory Management")
+        memory_button.clicked.connect(self.debug_memory_state)
+        debug_layout.addWidget(memory_button)
+        
+        # Add current BLAST tab info
+        blast_info_button = QPushButton("Show Current BLAST Info")
+        blast_info_button.clicked.connect(self.debug_show_blast_info)
+        debug_layout.addWidget(blast_info_button)
+        
+        debug_dock.setWidget(debug_widget)
+        self.addDockWidget(Qt.RightDockWidgetArea, debug_dock)
+    
+    
     def on_scroll_change(self, value):
         """Handle scroll events for dynamic loading"""
         # Use QTimer to delay widget creation which prevents UI freezing
@@ -789,6 +1915,152 @@ class DynamicTableWindow(QMainWindow):
             if scrollbar.value() > scrollbar.maximum() * 0.8:
                 self.request_more_data.emit(model.rowCount())
 
+    def debug_row_selection(self, row):
+        """Debug the row selection process"""
+        logging.debug(f"===== DEBUG ROW SELECTION: {row} =====")
+        
+        # First select the row
+        self.force_selection(row)
+        
+        # Now trace through the process
+        if not hasattr(self, 'model') or not self.model:
+            logging.debug("No model available!")
+            return
+            
+        # Calculate page and index
+        page_size = VirtualTableModel.PAGE_SIZE
+        page = row // page_size
+        page_index = row % page_size
+        
+        # Check if page is loaded
+        logging.debug(f"Checking if page {page} is loaded...")
+        if hasattr(self.model, '_loaded_data'):
+            if page in self.model._loaded_data:
+                logging.debug(f"Page {page} is loaded with {len(self.model._loaded_data[page])} items")
+            else:
+                logging.debug(f"Page {page} is NOT loaded!")
+                return
+        else:
+            logging.debug("Model has no _loaded_data attribute!")
+            return
+            
+        # Get item data
+        if page_index < len(self.model._loaded_data[page]):
+            item_data = self.model._loaded_data[page][page_index]
+            logging.debug(f"Item data found with keys: {list(item_data.keys())}")
+            
+            # Check BLAST data
+            if 'blast_hits' in item_data:
+                blast_hits = item_data['blast_hits']
+                logging.debug(f"Found {len(blast_hits)} blast hits")
+                
+                # Debug the update process
+                logging.debug("Forcing BLAST tab update...")
+                self.refresh_blast_tab(blast_hits)
+                logging.debug("BLAST tab update completed")
+            else:
+                logging.debug("No 'blast_hits' found in item data!")
+        else:
+            logging.debug(f"Index {page_index} is out of bounds for page {page}!")
+
+    def debug_blast_update(self, row):
+        """Directly update the BLAST tab for a specific row"""
+        logging.debug(f"===== DEBUG FORCE BLAST UPDATE: {row} =====")
+        
+        # Calculate page and index
+        page_size = VirtualTableModel.PAGE_SIZE
+        page = row // page_size
+        page_index = row % page_size
+        
+        # Force page load if needed
+        if hasattr(self.model, '_load_page') and (not hasattr(self.model, '_loaded_data') or page not in self.model._loaded_data):
+            logging.debug(f"Loading page {page}...")
+            self.model._load_page(page)
+        
+        # Get data and update
+        if hasattr(self.model, '_loaded_data') and page in self.model._loaded_data:
+            if page_index < len(self.model._loaded_data[page]):
+                item_data = self.model._loaded_data[page][page_index]
+                logging.debug(f"Found item data with keys: {list(item_data.keys())}")
+                
+                if 'blast_hits' in item_data:
+                    blast_hits = item_data['blast_hits']
+                    logging.debug(f"Found {len(blast_hits)} blast hits, forcing refresh...")
+                    
+                    # Force refresh to a new BLAST tab
+                    self.refresh_blast_tab(blast_hits)
+                    logging.debug("BLAST tab refresh completed")
+                else:
+                    logging.debug("No blast_hits found in item_data")
+            else:
+                logging.debug(f"Index {page_index} out of bounds for page {page}")
+        else:
+            logging.debug(f"Page {page} not available in model data")
+
+    def debug_memory_state(self):
+            """Check memory management and model state"""
+            if not hasattr(self, 'model'):
+                logging.debug("No model available")
+                return
+                
+            logging.debug("===== MEMORY STATE DEBUG =====")
+            
+            # Check loaded pages
+            if hasattr(self.model, '_loaded_data'):
+                loaded_pages = list(self.model._loaded_data.keys())
+                logging.debug(f"Loaded pages: {loaded_pages}")
+                
+                # Check current page
+                current_page = getattr(self.model, 'current_page', None)
+                logging.debug(f"Current page: {current_page}")
+                
+                # Check if current page is loaded
+                if current_page in self.model._loaded_data:
+                    logging.debug(f"Current page has {len(self.model._loaded_data[current_page])} items")
+                    
+                    # Check first item
+                    if len(self.model._loaded_data[current_page]) > 0:
+                        first_item = self.model._loaded_data[current_page][0]
+                        logging.debug(f"First item keys: {list(first_item.keys())}")
+                        
+                        if 'blast_hits' in first_item:
+                            logging.debug(f"First item has {len(first_item['blast_hits'])} blast hits")
+                        else:
+                            logging.debug("First item has NO blast hits")
+                else:
+                    logging.debug("Current page is NOT loaded")
+            else:
+                logging.debug("Model has no _loaded_data attribute")
+
+    def debug_show_blast_info(self):
+        """Show information about the current BLAST tab"""
+        logging.debug("===== BLAST TAB DEBUG =====")
+        
+        # Check if BLAST tab exists
+        if "BLAST" in self.detail_tabs:
+            logging.debug("BLAST tab exists")
+            
+            # Find the tab
+            for i in range(self.tabs.count()):
+                if self.tabs.tabText(i) == "BLAST":
+                    logging.debug(f"BLAST tab found at index {i}")
+                    
+                    # Check for the table
+                    tab_widget = self.detail_tabs["BLAST"]
+                    table = tab_widget.findChild(QTableWidget)
+                    
+                    if table:
+                        logging.debug(f"BLAST table found with {table.rowCount()} rows")
+                        
+                        # Check table content
+                        for row in range(min(3, table.rowCount())):
+                            hit_id = table.item(row, 0).text() if table.item(row, 0) else "N/A"
+                            logging.debug(f"Row {row}: Hit ID = {hit_id}")
+                    else:
+                        logging.debug("No QTableWidget found in BLAST tab")
+                    break
+        else:
+            logging.debug("No BLAST tab exists")
 
     def on_request_more_data(self, current_count):
         """Request more data to be loaded when scrolling near the end"""
@@ -1145,6 +2417,36 @@ class DynamicTableWindow(QMainWindow):
                 # Last resort - log the error but don't crash
                 logging.error(f"Failed to handle pagination widget: {str(e)}")
 
+        QTimer.singleShot(500, self.try_load_first_item_blast)        
+
+        self.data_loaded.emit()       
+
+
+    def on_page_loaded(self, page_index):
+        """Appelée après qu'une page a été chargée"""
+        logging.debug(f"Page {page_index} chargée correctement")
+        
+        # Si c'est la première page, essayez de charger les données BLAST du premier élément
+        if page_index == 0:
+            QTimer.singleShot(100, self.try_load_first_item_blast)
+
+    def try_load_first_item_blast(self):
+        """Tente à nouveau de charger l'onglet BLAST après le chargement complet de la page"""
+        if hasattr(self, 'model') and hasattr(self.model, '_loaded_data'):
+            page = 0
+            if page in self.model._loaded_data and len(self.model._loaded_data[page]) > 0:
+                # Afficher la structure complète du premier élément pour debug
+                item = self.model._loaded_data[page][0]
+                logging.debug(f"Structure premier élément chargé: {list(item.keys())}")
+                
+                # Look directly for blast_hits at top level (no 'display' key)
+                if 'blast_hits' in item:
+                    hits = item['blast_hits']  # Direct access, no 'display' key
+                    logging.debug(f"Premier élément contient {len(hits)} blast_hits")
+                    QTimer.singleShot(100, lambda: self.update_blast_tab(hits))
+                else:
+                    logging.debug("Aucun 'blast_hits' trouvé dans item")
+                    
     def reveal_pagination(self):
         """Force reveal pagination controls and show debugging info"""
         try:
