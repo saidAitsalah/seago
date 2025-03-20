@@ -52,7 +52,7 @@ class AppController(QObject):
 
     def _setup_ui(self):
         
-        self.main_window.setWindowTitle("SeaGO")
+        self.main_window.setWindowTitle("SeaGO-Annotation and visualisation of genomic data")
         self.main_window.resize(1200, 900)
         
         icon = QIcon("./assets/image.png")
